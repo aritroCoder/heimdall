@@ -1,6 +1,8 @@
 'use strict';
 
 const { createServer } = require('node:http');
+const { readFile } = require('node:fs/promises');
+const { join, extname } = require('node:path');
 
 const { buildConfigFromEnv, runTriageForPullRequest } = require('./triage.js');
 
@@ -195,14 +197,54 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
   return { app, createNodeMiddleware };
 }
 
+const MIME_TYPES = {
+  '.html': 'text/html',
+  '.css': 'text/css',
+  '.js': 'application/javascript',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+};
+
+const SITE_DIR = join(__dirname, '..', 'site');
+
+async function serveSiteFile(req, res) {
+  const urlPath = req.url.split('?')[0];
+  const filePath = urlPath === '/' ? '/index.html' : urlPath;
+
+  // Prevent path traversal
+  const resolved = join(SITE_DIR, filePath);
+  if (!resolved.startsWith(SITE_DIR)) {
+    res.writeHead(403);
+    res.end();
+    return;
+  }
+
+  try {
+    const data = await readFile(resolved);
+    const ext = extname(resolved).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    res.writeHead(200, { 'Content-Type': contentType });
+    res.end(data);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+}
+
 async function startServer({ env = process.env, logger = console } = {}) {
   const { app, createNodeMiddleware } = await createGithubApp({ env, logger });
-  const middleware = createNodeMiddleware(app.webhooks, {
+  const webhookMiddleware = createNodeMiddleware(app.webhooks, {
     path: '/api/github/webhooks',
   });
 
   const port = getPort(env);
-  const server = createServer(middleware);
+  const server = createServer((req, res) => {
+    // Let webhook middleware handle its path; fall through to static site
+    webhookMiddleware(req, res, () => serveSiteFile(req, res));
+  });
 
   await new Promise((resolve, reject) => {
     server.listen(port, () => {
