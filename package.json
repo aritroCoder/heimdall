@@ -1,0 +1,19 @@
+{
+  "name": "heimdall-pr-triage",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Heimdall: The all-seeing GitHub PR guardian that filters AI slop and low-effort contributions.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test",
+    "build": "node --check src/triage.js && node --check src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@octokit/app": "^16.1.0",
+    "@octokit/webhooks": "^14.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
