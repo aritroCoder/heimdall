@@ -43,20 +43,54 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Deploy to Container Apps
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          resourceGroup: ${{ env.RESOURCE_GROUP }}
-          containerAppName: ${{ env.CONTAINER_APP_NAME }}
-          containerAppEnvironment: ${{ env.CONTAINER_APP_ENV }}
-          location: ${{ env.LOCATION }}
-          imageToDeploy: ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          registryUrl: ${{ env.ACR_NAME }}.azurecr.io
-          registryUsername: ${{ secrets.ACR_USERNAME }}
-          registryPassword: ${{ secrets.ACR_PASSWORD }}
-          targetPort: 3000
-          ingress: external
-          environmentVariables: >-
-            GITHUB_APP_ID=${{ secrets.APP_ID }}
-            GITHUB_APP_PRIVATE_KEY=${{ secrets.APP_PRIVATE_KEY }}
-            GITHUB_WEBHOOK_SECRET=${{ secrets.APP_WEBHOOK_SECRET }}
-            PORT=3000
+        env:
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+          APP_WEBHOOK_SECRET: ${{ secrets.APP_WEBHOOK_SECRET }}
+        run: |
+          az extension add --name containerapp --upgrade --yes
+
+          EXISTS=$(az containerapp show \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --query name -o tsv 2>/dev/null || echo "")
+
+          if [ -z "$EXISTS" ]; then
+            az containerapp create \
+              --name ${{ env.CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --environment ${{ env.CONTAINER_APP_ENV }} \
+              --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+              --registry-server ${{ env.ACR_NAME }}.azurecr.io \
+              --registry-username ${{ secrets.ACR_USERNAME }} \
+              --registry-password ${{ secrets.ACR_PASSWORD }} \
+              --target-port 3000 \
+              --ingress external \
+              --secrets \
+                app-id="$APP_ID" \
+                app-private-key="$APP_PRIVATE_KEY" \
+                app-webhook-secret="$APP_WEBHOOK_SECRET" \
+              --env-vars \
+                GITHUB_APP_ID=secretref:app-id \
+                GITHUB_APP_PRIVATE_KEY=secretref:app-private-key \
+                GITHUB_WEBHOOK_SECRET=secretref:app-webhook-secret \
+                PORT=3000
+          else
+            az containerapp secret set \
+              --name ${{ env.CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --secrets \
+                app-id="$APP_ID" \
+                app-private-key="$APP_PRIVATE_KEY" \
+                app-webhook-secret="$APP_WEBHOOK_SECRET"
+
+            az containerapp update \
+              --name ${{ env.CONTAINER_APP_NAME }} \
+              --resource-group ${{ env.RESOURCE_GROUP }} \
+              --image ${{ env.ACR_NAME }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+              --set-env-vars \
+                GITHUB_APP_ID=secretref:app-id \
+                GITHUB_APP_PRIVATE_KEY=secretref:app-private-key \
+                GITHUB_WEBHOOK_SECRET=secretref:app-webhook-secret \
+                PORT=3000
+          fi
