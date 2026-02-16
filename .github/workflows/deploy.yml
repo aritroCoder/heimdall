@@ -56,7 +56,7 @@ jobs:
           targetPort: 3000
           ingress: external
           environmentVariables: >-
-            GITHUB_APP_ID=secretref:github-app-id
-            GITHUB_APP_PRIVATE_KEY=secretref:github-app-private-key
-            GITHUB_WEBHOOK_SECRET=secretref:github-webhook-secret
+            GITHUB_APP_ID=${{ secrets.APP_ID }}
+            GITHUB_APP_PRIVATE_KEY=${{ secrets.APP_PRIVATE_KEY }}
+            GITHUB_WEBHOOK_SECRET=${{ secrets.APP_WEBHOOK_SECRET }}
             PORT=3000
