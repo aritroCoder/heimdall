@@ -3,6 +3,9 @@
 
 The all-seeing GitHub PR guardian that filters AI slop and low-effort contributions. Install it on any org or repo — no workflow files needed in target repositories.
 
+## Install in your repository
+Installation is completely free and takes just two clicks. Visit https://heimdall.axerlabs.com/ and add it to your GitHub.
+
 ## What It Does
 
 - Listens to `pull_request` webhooks and triages on every PR open, edit, sync, or reopen.
