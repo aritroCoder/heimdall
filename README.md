@@ -1,4 +1,5 @@
 # Heimdall
+![Heimdall banner](./site/heimdall.png)
 
 The all-seeing GitHub PR guardian that filters AI slop and low-effort contributions. Install it on any org or repo — no workflow files needed in target repositories.
 
