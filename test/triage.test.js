@@ -6,7 +6,9 @@ const assert = require('node:assert/strict');
 const {
   analyzePullRequest,
   buildConfigFromEnv,
+  determineSizeLabel,
   getDesiredLabels,
+  DEFAULT_CONFIG,
 } = require('../src/triage.js');
 
 test('scores docs-only pull requests without bypassing', () => {
@@ -59,7 +61,7 @@ test('flags both low-effort and AI-slop when multiple strong signals exist', () 
 
   assert.equal(analysis.lowEffort.flagged, true);
   assert.equal(analysis.aiSlop.flagged, true);
-  assert.deepEqual(new Set(labels), new Set(['triage:low-effort', 'triage:ai-slop']));
+  assert.deepEqual(new Set(labels), new Set(['size/XL', 'triage:low-effort', 'triage:ai-slop']));
 });
 
 test('does not flag high-context pull requests with tests', () => {
@@ -113,4 +115,96 @@ test('buildConfigFromEnv parses numeric and csv settings', () => {
   assert.deepEqual(config.trustedAuthors, ['alice', 'bob']);
   assert.deepEqual(config.trustedTitlePatterns, ['^docs:', '^chore:']);
   assert.equal(config.minFindingsForLabel, 3);
+});
+
+test('determineSizeLabel returns XS for fewer than 10 lines', () => {
+  const label = determineSizeLabel(5, DEFAULT_CONFIG);
+  assert.equal(label, 'size/XS');
+});
+
+test('determineSizeLabel returns S for 10-99 lines', () => {
+  assert.equal(determineSizeLabel(10, DEFAULT_CONFIG), 'size/S');
+  assert.equal(determineSizeLabel(99, DEFAULT_CONFIG), 'size/S');
+});
+
+test('determineSizeLabel returns M for 100-499 lines', () => {
+  assert.equal(determineSizeLabel(100, DEFAULT_CONFIG), 'size/M');
+  assert.equal(determineSizeLabel(499, DEFAULT_CONFIG), 'size/M');
+});
+
+test('determineSizeLabel returns L for 500-999 lines', () => {
+  assert.equal(determineSizeLabel(500, DEFAULT_CONFIG), 'size/L');
+  assert.equal(determineSizeLabel(999, DEFAULT_CONFIG), 'size/L');
+});
+
+test('determineSizeLabel returns XL for 1000+ lines', () => {
+  assert.equal(determineSizeLabel(1000, DEFAULT_CONFIG), 'size/XL');
+  assert.equal(determineSizeLabel(5000, DEFAULT_CONFIG), 'size/XL');
+});
+
+test('determineSizeLabel returns XS for zero lines', () => {
+  assert.equal(determineSizeLabel(0, DEFAULT_CONFIG), 'size/XS');
+});
+
+test('analyzePullRequest includes sizeLabel in result', () => {
+  const analysis = analyzePullRequest({
+    pr: {
+      title: 'feat: add new feature',
+      body: 'A detailed description of the changes being made here.',
+      additions: 80,
+      deletions: 15,
+      changed_files: 3,
+    },
+    files: [
+      { filename: 'src/feature.ts' },
+      { filename: 'src/helper.ts' },
+      { filename: 'test/feature.test.ts' },
+    ],
+    commits: [{ commit: { message: 'feat: add new feature' } }],
+    config: {},
+  });
+
+  assert.equal(analysis.sizeLabel, 'size/S');
+});
+
+test('getDesiredLabels includes size label alongside triage labels', () => {
+  const analysis = {
+    sizeLabel: 'size/M',
+    lowEffort: { flagged: true },
+    aiSlop: { flagged: false },
+  };
+
+  const labels = getDesiredLabels(analysis, {
+    lowEffortLabel: 'triage:low-effort',
+    aiSlopLabel: 'triage:ai-slop',
+  });
+
+  assert.ok(labels.includes('size/M'), 'should include size label');
+  assert.ok(labels.includes('triage:low-effort'), 'should include low-effort label');
+  assert.equal(labels.length, 2);
+});
+
+test('getDesiredLabels includes only size label when no triage flags', () => {
+  const analysis = {
+    sizeLabel: 'size/XS',
+    lowEffort: { flagged: false },
+    aiSlop: { flagged: false },
+  };
+
+  const labels = getDesiredLabels(analysis, {
+    lowEffortLabel: 'triage:low-effort',
+    aiSlopLabel: 'triage:ai-slop',
+  });
+
+  assert.deepEqual(labels, ['size/XS']);
+});
+
+test('buildConfigFromEnv parses size thresholds and labels', () => {
+  const config = buildConfigFromEnv({
+    TRIAGE_SIZE_THRESHOLDS: '5,50,200,800',
+    TRIAGE_SIZE_LABELS: 'sz/tiny,sz/small,sz/medium,sz/large,sz/huge',
+  });
+
+  assert.deepEqual(config.sizeThresholds, [5, 50, 200, 800]);
+  assert.deepEqual(config.sizeLabels, ['sz/tiny', 'sz/small', 'sz/medium', 'sz/large', 'sz/huge']);
 });

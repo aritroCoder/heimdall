@@ -186,6 +186,7 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
         `    findings: ${formatFindings(lowEffort.findings)}\n` +
         `  ai-slop:    ${aiSlop.score}/100 (threshold ${aiSlop.threshold}, flagged=${aiSlop.flagged})\n` +
         `    findings: ${formatFindings(aiSlop.findings)}\n` +
+        `  size: ${result.analysis.sizeLabel}\n` +
         `  labels: ${result.desiredLabels.join(', ') || 'none'}`,
     );
   });

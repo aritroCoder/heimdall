@@ -12,6 +12,7 @@ Installation is completely free and takes just two clicks. Visit https://heimdal
 - Applies/removes managed labels:
   - `triage:low-effort`
   - `triage:ai-slop`
+  - `size/XS`, `size/S`, `size/M`, `size/L`, `size/XL` (mutually exclusive PR size)
 - Posts one explainable triage comment showing the score breakdown, and updates it on each run.
 - Supports a maintainer override label (`reviewed-by-human`) to skip triage for a specific PR.
 - Bypasses trusted authors (e.g. `dependabot[bot]`) and trusted title patterns (e.g. `^docs:`).
@@ -217,6 +218,8 @@ docker run -d -p 3000:3000 \
 | `TRIAGE_TRUSTED_AUTHORS` | `dependabot[bot],renovate[bot]` | CSV of authors to skip |
 | `TRIAGE_TRUSTED_TITLE_REGEX` | `^docs:,^chore\(deps\):,^build\(deps\):` | CSV of title regex patterns to skip |
 | `TRIAGE_MIN_FINDINGS` | `2` | Minimum number of findings required to apply a label |
+| `TRIAGE_SIZE_THRESHOLDS` | `10,100,500,1000` | CSV of line-count boundaries between size tiers |
+| `TRIAGE_SIZE_LABELS` | `size/XS,size/S,size/M,size/L,size/XL` | CSV of label names for each size tier |
 | `PORT` | `3000` | Server listen port |
 
 ---
@@ -253,6 +256,22 @@ Each PR is scored on two independent axes. A label is applied only when **both**
 | Moderate churn/file | >= 5 files, >= 120 lines/file avg | +10 |
 | Explicit AI disclosure | Body mentions AI generation | +20 |
 | Generic metadata combo | >= 60% generic commits + body < 120 chars | +10 |
+
+---
+
+## PR Size Labels
+
+Every PR receives exactly one size label based on total lines changed (additions + deletions). Size labels are mutually exclusive — only the matching tier is applied, and all others are removed.
+
+| Label | Lines Changed | Color |
+|-------|--------------|-------|
+| `size/XS` | < 10 | 🟢 Green |
+| `size/S` | 10 – 99 | 🟢 Light green |
+| `size/M` | 100 – 499 | 🟡 Yellow |
+| `size/L` | 500 – 999 | 🟠 Orange |
+| `size/XL` | 1000+ | 🔴 Red |
+
+Both the thresholds and label names can be customized via `TRIAGE_SIZE_THRESHOLDS` and `TRIAGE_SIZE_LABELS` environment variables.
 
 ---
 

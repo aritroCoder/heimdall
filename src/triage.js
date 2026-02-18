@@ -9,9 +9,13 @@ const DEFAULT_CONFIG = Object.freeze({
   lowEffortLabel: 'triage:low-effort',
   humanReviewedLabel: 'reviewed-by-human',
   trustedAuthors: ['dependabot[bot]', 'renovate[bot]'],
-  trustedTitlePatterns: ['^docs:', '^chore\\(deps\\):', '^build\\(deps\\):'],
+  trustedTitlePatterns: ['^docs:', '^chore\\\\(deps\\\\):', '^build\\\\(deps\\\\):'],
   minFindingsForLabel: 2,
+  sizeLabels: ['size/XS', 'size/S', 'size/M', 'size/L', 'size/XL'],
+  sizeThresholds: [10, 100, 500, 1000],
 });
+
+const SIZE_LABEL_COLORS = ['3cbf00', '5d9801', 'fbca04', 'ff9500', 'e11d48'];
 
 const GENERIC_TITLE_RE = /^(update[ds]?|fix(e[ds])?|changes?|misc|improvements?|refactor(ed)?|cleanup|wip|add(ed)?|remove[ds]?|delete[ds]?|modify|modifie[ds]|tweak(ed)?|adjust(ed)?|bump(ed)?)\b/i;
 const GENERIC_COMMIT_RE = /^(fix|update|changes?|misc|refactor|cleanup|wip|address review comments|apply suggestions?)($|[:\s])/i;
@@ -89,6 +93,10 @@ function normalizeConfig(inputConfig) {
     minFindingsForLabel: parseInteger(config.minFindingsForLabel, DEFAULT_CONFIG.minFindingsForLabel),
     trustedAuthors: Array.isArray(config.trustedAuthors) ? config.trustedAuthors : [],
     trustedTitlePatterns: Array.isArray(config.trustedTitlePatterns) ? config.trustedTitlePatterns : [],
+    sizeLabels: Array.isArray(config.sizeLabels) ? config.sizeLabels : DEFAULT_CONFIG.sizeLabels,
+    sizeThresholds: Array.isArray(config.sizeThresholds)
+      ? config.sizeThresholds.map(Number).filter((n) => !Number.isNaN(n))
+      : DEFAULT_CONFIG.sizeThresholds,
   };
 }
 
@@ -103,6 +111,8 @@ function buildConfigFromEnv(env) {
   if (env.TRIAGE_TRUSTED_AUTHORS) overrides.trustedAuthors = parseCsv(env.TRIAGE_TRUSTED_AUTHORS);
   if (env.TRIAGE_TRUSTED_TITLE_REGEX) overrides.trustedTitlePatterns = parseCsv(env.TRIAGE_TRUSTED_TITLE_REGEX);
   if (env.TRIAGE_MIN_FINDINGS) overrides.minFindingsForLabel = env.TRIAGE_MIN_FINDINGS;
+  if (env.TRIAGE_SIZE_THRESHOLDS) overrides.sizeThresholds = parseCsv(env.TRIAGE_SIZE_THRESHOLDS).map(Number);
+  if (env.TRIAGE_SIZE_LABELS) overrides.sizeLabels = parseCsv(env.TRIAGE_SIZE_LABELS);
 
   return normalizeConfig(overrides);
 }
@@ -159,6 +169,19 @@ function scoreCategory(findings, threshold, minFindings) {
     findings,
     flagged: score >= threshold && findings.length >= minFindings,
   };
+}
+
+function determineSizeLabel(totalLinesChanged, config) {
+  const thresholds = config.sizeThresholds;
+  const labels = config.sizeLabels;
+
+  for (let i = 0; i < thresholds.length; i++) {
+    if (totalLinesChanged < thresholds[i]) {
+      return labels[i];
+    }
+  }
+
+  return labels[labels.length - 1];
 }
 
 function normalizeCommitMessage(message) {
@@ -294,9 +317,12 @@ function analyzePullRequest({ pr, files, commits, config }) {
     );
   }
 
+  const sizeLabel = determineSizeLabel(totalLinesChanged, effectiveConfig);
+
   return {
     bypassed: false,
     bypassReason: null,
+    sizeLabel,
     summary: {
       bodyLength,
       totalLinesChanged,
@@ -322,6 +348,10 @@ function analyzePullRequest({ pr, files, commits, config }) {
 
 function getDesiredLabels(analysis, config) {
   const labels = [];
+
+  if (analysis.sizeLabel) {
+    labels.push(analysis.sizeLabel);
+  }
 
   if (analysis.lowEffort.flagged) {
     labels.push(config.lowEffortLabel);
@@ -399,6 +429,14 @@ async function ensureManagedLabelsExist({ github, owner, repo, config }) {
     },
   ];
 
+  for (let i = 0; i < config.sizeLabels.length; i++) {
+    labelDefinitions.push({
+      name: config.sizeLabels[i],
+      color: SIZE_LABEL_COLORS[i] || SIZE_LABEL_COLORS[SIZE_LABEL_COLORS.length - 1],
+      description: `PR size classification: ${config.sizeLabels[i]}.`,
+    });
+  }
+
   for (const label of labelDefinitions) {
     try {
       await github.rest.issues.createLabel({
@@ -425,7 +463,7 @@ async function syncManagedLabels({
   desiredLabels,
   config,
 }) {
-  const managedLabelSet = new Set([config.lowEffortLabel, config.aiSlopLabel]);
+  const managedLabelSet = new Set([config.lowEffortLabel, config.aiSlopLabel, ...config.sizeLabels]);
   const existingSet = new Set(existingLabels);
 
   const labelsToAdd = desiredLabels.filter((label) => !existingSet.has(label));
@@ -633,6 +671,7 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
   });
 
   const desiredLabels = analysis.bypassed ? [] : getDesiredLabels(analysis, effectiveConfig);
+  const hasTriageLabels = analysis.lowEffort.flagged || analysis.aiSlop.flagged;
 
   if (desiredLabels.length > 0) {
     await ensureManagedLabelsExist({ github, owner, repo, config: effectiveConfig });
@@ -648,7 +687,7 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
     config: effectiveConfig,
   });
 
-  if (desiredLabels.length === 0) {
+  if (!hasTriageLabels) {
     await deleteTriageComment({ github, owner, repo, issueNumber: pullNumber });
   } else {
     const commentBody = buildCommentBody(analysis, effectiveConfig);
@@ -705,9 +744,11 @@ async function runTriage({ github, context, core, config }) {
 module.exports = {
   BOT_COMMENT_MARKER,
   DEFAULT_CONFIG,
+  SIZE_LABEL_COLORS,
   analyzePullRequest,
   buildCommentBody,
   buildConfigFromEnv,
+  determineSizeLabel,
   getDesiredLabels,
   isDocsOrConfigFile,
   isSourceFile,
