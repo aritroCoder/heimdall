@@ -63,7 +63,7 @@ test('buildDuplicateConfigFromEnv parses booleans and thresholds', () => {
     DUPLICATE_MAX_OPEN_CANDIDATES: '30',
     DUPLICATE_FILE_OVERLAP_THRESHOLD: '0.8',
     DUPLICATE_STRUCTURAL_SIMILARITY_THRESHOLD: '0.9',
-    DUPLICATE_SEMANTIC_SIMILARITY_THRESHOLD: '0.95',
+    DUPLICATE_METADATA_SIMILARITY_THRESHOLD: '0.95',
   });
 
   assert.equal(config.enabled, true);
@@ -71,7 +71,7 @@ test('buildDuplicateConfigFromEnv parses booleans and thresholds', () => {
   assert.equal(config.maxOpenCandidates, 30);
   assert.equal(config.fileOverlapThreshold, 0.8);
   assert.equal(config.structuralSimilarityThreshold, 0.9);
-  assert.equal(config.semanticSimilarityThreshold, 0.95);
+  assert.equal(config.metadataSimilarityThreshold, 0.95);
 });
 
 test('buildPullRequestRepresentation extracts files, imports, and changed symbols', () => {
@@ -228,7 +228,7 @@ test('detectDuplicatePullRequest finds duplicate among filtered candidates', asy
       maxCandidateComparisons: 10,
       fileOverlapThreshold: 0.7,
       structuralSimilarityThreshold: 0.8,
-      semanticSimilarityThreshold: 0.8,
+      metadataSimilarityThreshold: 0.8,
     },
   });
 
@@ -254,7 +254,7 @@ test('buildDuplicateCommentBody renders marker and top-match breakdown', () => {
             metrics: {
               fileOverlap: 1,
               structuralSimilarity: 1,
-              semanticSimilarity: 0.95,
+              metadataSimilarity: 0.95,
             },
           },
         },
@@ -263,7 +263,7 @@ test('buildDuplicateCommentBody renders marker and top-match breakdown', () => {
       thresholds: {
         fileOverlap: 0.7,
         structuralSimilarity: 0.85,
-        semanticSimilarity: 0.9,
+        metadataSimilarity: 0.9,
       },
     },
   });

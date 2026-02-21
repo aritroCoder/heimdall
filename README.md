@@ -14,7 +14,7 @@ Installation is completely free and takes just two clicks. Visit https://heimdal
   - `triage:ai-slop`
   - `size/XS`, `size/S`, `size/M`, `size/L`, `size/XL` (mutually exclusive PR size)
 - Posts one explainable triage comment showing the score breakdown, and updates it on each run.
-- Detects likely duplicate pull requests on `pull_request.opened` using patch fingerprints + structural + semantic similarity, and posts a dedicated duplicate warning comment.
+- Detects likely duplicate pull requests on `pull_request.opened` using patch fingerprints + structural + metadata-hash similarity, and posts a dedicated duplicate warning comment.
 - Supports a maintainer override label (`reviewed-by-human`) to skip triage for a specific PR.
 - Bypasses trusted authors (e.g. `dependabot[bot]`) and trusted title patterns (e.g. `^docs:`).
 
@@ -230,7 +230,8 @@ docker run -d -p 3000:3000 \
 | `DUPLICATE_TOP_LEVEL_DIR_OVERLAP_THRESHOLD` | `0.5` | Minimum top-level directory overlap for candidate filter |
 | `DUPLICATE_FILE_OVERLAP_THRESHOLD` | `0.7` | Minimum file-path Jaccard overlap before deeper checks |
 | `DUPLICATE_STRUCTURAL_SIMILARITY_THRESHOLD` | `0.85` | Minimum cosine similarity on normalized added-line tokens |
-| `DUPLICATE_SEMANTIC_SIMILARITY_THRESHOLD` | `0.9` | Minimum semantic-vector cosine similarity |
+| `DUPLICATE_METADATA_SIMILARITY_THRESHOLD` | `0.9` | Minimum metadata-hash vector cosine similarity |
+| `DUPLICATE_METADATA_VECTOR_SIZE` | `256` | Dimension size for metadata-hash vectors |
 | `DUPLICATE_CANDIDATE_FETCH_CONCURRENCY` | `4` | Parallel candidate file-fetch workers |
 | `DUPLICATE_MERGED_LOOKBACK_DAYS` | `180` | Ignore merged PRs older than this many days |
 | `PORT` | `3000` | Server listen port |
