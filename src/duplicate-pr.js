@@ -498,10 +498,10 @@ function buildDuplicateCommentBody({ detectionResult, currentPullRequest }) {
   }
 
   lines.push(
-      '',
-      `Thresholds used: file overlap >= ${formatPercent(detectionResult.thresholds.fileOverlap)}, ` +
-        `structural >= ${formatPercent(detectionResult.thresholds.structuralSimilarity)}, ` +
-      `metadata >= ${formatPercent(detectionResult.thresholds.metadataSimilarity)}.`,
+    '',
+    `Thresholds used: file overlap >= ${formatPercent(detectionResult.thresholds.fileOverlap)}, ` +
+      `structural >= ${formatPercent(detectionResult.thresholds.structuralSimilarity)}, ` +
+    `metadata >= ${formatPercent(detectionResult.thresholds.metadataSimilarity)}.`,
     '',
     'If this is intentional, keep this PR open and ignore this notice.',
   );
