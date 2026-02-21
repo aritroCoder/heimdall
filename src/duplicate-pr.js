@@ -7,7 +7,6 @@ const {
   mapWithConcurrency,
   normalizeCodeLine,
   parseBoolean,
-  parseCsv,
   parseInteger,
   parseNumber,
   toSha256,
@@ -687,5 +686,4 @@ module.exports = {
   jaccardSimilarity,
   normalizeCodeLine,
   normalizeDuplicateConfig,
-  parseCsv,
 };
