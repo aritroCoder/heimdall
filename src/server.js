@@ -5,6 +5,7 @@ const { readFile } = require('node:fs/promises');
 const { join, extname } = require('node:path');
 
 const { buildConfigFromEnv, runTriageForPullRequest } = require('./triage.js');
+const { buildDuplicateConfigFromEnv } = require('./duplicate-pr.js');
 
 const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
   'opened',
@@ -93,6 +94,7 @@ function createRestCompatClient(octokit) {
     rest: {
       pulls: {
         get: (params) => request('GET /repos/{owner}/{repo}/pulls/{pull_number}', params),
+        list: (params) => request('GET /repos/{owner}/{repo}/pulls', params),
         listFiles: (params) => request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', params),
         listCommits: (params) =>
           request('GET /repos/{owner}/{repo}/pulls/{pull_number}/commits', params),
@@ -127,6 +129,7 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
   const privateKey = normalizePrivateKey(requireEnv('GITHUB_APP_PRIVATE_KEY', env));
   const webhookSecret = requireEnv('GITHUB_WEBHOOK_SECRET', env);
   const triageConfig = buildConfigFromEnv(env);
+  const duplicateConfig = buildDuplicateConfigFromEnv(env);
 
   const app = new App({
     appId,
@@ -164,6 +167,8 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
       repo,
       pullNumber,
       config: triageConfig,
+      duplicateConfig,
+      eventAction: payload.action,
       logger,
     });
 
@@ -175,10 +180,19 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
     }
 
     const { lowEffort, aiSlop } = result.analysis;
+    const duplicateDetection = result.duplicateDetection || {
+      checked: false,
+      skipReason: 'not-run',
+      flagged: false,
+      matches: [],
+    };
     const formatFindings = (findings) =>
       findings.length === 0
         ? 'none'
         : findings.map((f) => `${f.id} (+${f.points})`).join(', ');
+    const duplicateSummary = duplicateDetection.checked
+      ? `checked (flagged=${duplicateDetection.flagged}, matches=${duplicateDetection.matches.length})`
+      : `skipped (${duplicateDetection.skipReason || 'unknown'})`;
 
     logger.info(
       `Triage completed for ${owner}/${repo}#${pullNumber}\n` +
@@ -186,6 +200,7 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
         `    findings: ${formatFindings(lowEffort.findings)}\n` +
         `  ai-slop:    ${aiSlop.score}/100 (threshold ${aiSlop.threshold}, flagged=${aiSlop.flagged})\n` +
         `    findings: ${formatFindings(aiSlop.findings)}\n` +
+        `  duplicate:  ${duplicateSummary}\n` +
         `  size: ${result.analysis.sizeLabel}\n` +
         `  labels: ${result.desiredLabels.join(', ') || 'none'}`,
     );

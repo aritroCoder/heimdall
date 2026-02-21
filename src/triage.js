@@ -1,5 +1,12 @@
 'use strict';
 
+const {
+  DUPLICATE_COMMENT_MARKER,
+  buildDuplicateCommentBody,
+  detectDuplicatePullRequest,
+  normalizeDuplicateConfig,
+} = require('./duplicate-pr.js');
+
 const BOT_COMMENT_MARKER = '<!-- heimdall-bot -->';
 
 const DEFAULT_CONFIG = Object.freeze({
@@ -496,7 +503,7 @@ async function syncManagedLabels({
   }
 }
 
-async function findExistingBotComment({ github, owner, repo, issueNumber }) {
+async function findExistingManagedComment({ github, owner, repo, issueNumber, marker }) {
   const comments = await github.paginate(github.rest.issues.listComments, {
     owner,
     repo,
@@ -504,13 +511,39 @@ async function findExistingBotComment({ github, owner, repo, issueNumber }) {
     per_page: 100,
   });
 
-  return comments.find((comment) =>
-    typeof comment.body === 'string' && comment.body.includes(BOT_COMMENT_MARKER),
-  );
+  return comments.find((comment) => typeof comment.body === 'string' && comment.body.includes(marker));
 }
 
 async function upsertTriageComment({ github, owner, repo, issueNumber, body }) {
-  const existingComment = await findExistingBotComment({ github, owner, repo, issueNumber });
+  await upsertManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    body,
+    marker: BOT_COMMENT_MARKER,
+  });
+}
+
+async function upsertDuplicateComment({ github, owner, repo, issueNumber, body }) {
+  await upsertManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    body,
+    marker: DUPLICATE_COMMENT_MARKER,
+  });
+}
+
+async function upsertManagedComment({ github, owner, repo, issueNumber, body, marker }) {
+  const existingComment = await findExistingManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    marker,
+  });
 
   if (existingComment) {
     await github.rest.issues.updateComment({
@@ -531,7 +564,34 @@ async function upsertTriageComment({ github, owner, repo, issueNumber, body }) {
 }
 
 async function deleteTriageComment({ github, owner, repo, issueNumber }) {
-  const existingComment = await findExistingBotComment({ github, owner, repo, issueNumber });
+  await deleteManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    marker: BOT_COMMENT_MARKER,
+  });
+}
+
+async function deleteDuplicateComment({ github, owner, repo, issueNumber }) {
+  await deleteManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    marker: DUPLICATE_COMMENT_MARKER,
+  });
+}
+
+async function deleteManagedComment({ github, owner, repo, issueNumber, marker }) {
+  const existingComment = await findExistingManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    marker,
+  });
+
   if (!existingComment) {
     return;
   }
@@ -541,6 +601,79 @@ async function deleteTriageComment({ github, owner, repo, issueNumber }) {
     repo,
     comment_id: existingComment.id,
   });
+}
+
+function buildSkippedDuplicateDetection(skipReason) {
+  return {
+    checked: false,
+    skipReason,
+    flagged: false,
+    candidateCount: 0,
+    comparedCount: 0,
+    matches: [],
+    bestMatch: null,
+    reverts: [],
+    thresholds: null,
+  };
+}
+
+async function runDuplicateCheckForPullRequest({
+  github,
+  owner,
+  repo,
+  pullNumber,
+  fullPullRequest,
+  files,
+  duplicateConfig,
+  eventAction,
+  logger,
+}) {
+  const log = toLogger(logger);
+  const effectiveDuplicateConfig = normalizeDuplicateConfig(duplicateConfig);
+
+  if (!effectiveDuplicateConfig.enabled) {
+    return buildSkippedDuplicateDetection('disabled');
+  }
+
+  if (effectiveDuplicateConfig.onlyOnOpened && eventAction && eventAction !== 'opened') {
+    return buildSkippedDuplicateDetection('non-opened-action');
+  }
+
+  if (!github || !github.rest || !github.rest.pulls || typeof github.rest.pulls.list !== 'function') {
+    log.warning('Duplicate detection skipped: github.rest.pulls.list is unavailable in this client.');
+    return buildSkippedDuplicateDetection('unsupported-client');
+  }
+
+  const duplicateResult = await detectDuplicatePullRequest({
+    github,
+    owner,
+    repo,
+    currentPullRequest: fullPullRequest,
+    currentFiles: files,
+    config: effectiveDuplicateConfig,
+    logger: log,
+  });
+
+  if (duplicateResult.flagged) {
+    const commentBody = buildDuplicateCommentBody({
+      detectionResult: duplicateResult,
+      currentPullRequest: fullPullRequest,
+    });
+
+    if (commentBody) {
+      await upsertDuplicateComment({
+        github,
+        owner,
+        repo,
+        issueNumber: pullNumber,
+        body: commentBody,
+      });
+    }
+  } else if (duplicateResult.checked) {
+    await deleteDuplicateComment({ github, owner, repo, issueNumber: pullNumber });
+  }
+
+  return duplicateResult;
 }
 
 function toLogger(logger) {
@@ -568,7 +701,16 @@ function toLogger(logger) {
   };
 }
 
-async function runTriageForPullRequest({ github, owner, repo, pullNumber, config, logger }) {
+async function runTriageForPullRequest({
+  github,
+  owner,
+  repo,
+  pullNumber,
+  config,
+  duplicateConfig,
+  eventAction,
+  logger,
+}) {
   const log = toLogger(logger);
   const effectiveConfig = normalizeConfig(config);
 
@@ -600,12 +742,14 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
       config: effectiveConfig,
     });
     await deleteTriageComment({ github, owner, repo, issueNumber: pullNumber });
+    await deleteDuplicateComment({ github, owner, repo, issueNumber: pullNumber });
     log.info('Skipping triage because PR has the human-reviewed override label.');
     return {
       skipped: true,
       skipReason: 'human-reviewed',
       analysis: null,
       desiredLabels: [],
+      duplicateDetection: buildSkippedDuplicateDetection('triage-bypassed-human-reviewed'),
     };
   }
 
@@ -620,12 +764,14 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
       config: effectiveConfig,
     });
     await deleteTriageComment({ github, owner, repo, issueNumber: pullNumber });
+    await deleteDuplicateComment({ github, owner, repo, issueNumber: pullNumber });
     log.info(`Skipping triage for trusted author: ${author}.`);
     return {
       skipped: true,
       skipReason: 'trusted-author',
       analysis: null,
       desiredLabels: [],
+      duplicateDetection: buildSkippedDuplicateDetection('triage-bypassed-trusted-author'),
     };
   }
 
@@ -640,12 +786,14 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
       config: effectiveConfig,
     });
     await deleteTriageComment({ github, owner, repo, issueNumber: pullNumber });
+    await deleteDuplicateComment({ github, owner, repo, issueNumber: pullNumber });
     log.info('Skipping triage because title matches an allowlisted pattern.');
     return {
       skipped: true,
       skipReason: 'trusted-title',
       analysis: null,
       desiredLabels: [],
+      duplicateDetection: buildSkippedDuplicateDetection('triage-bypassed-trusted-title'),
     };
   }
 
@@ -655,6 +803,25 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
     pull_number: pullNumber,
     per_page: 100,
   });
+
+  let duplicateDetection = buildSkippedDuplicateDetection('not-run');
+  try {
+    duplicateDetection = await runDuplicateCheckForPullRequest({
+      github,
+      owner,
+      repo,
+      pullNumber,
+      fullPullRequest,
+      files,
+      duplicateConfig,
+      eventAction,
+      logger: log,
+    });
+  } catch (error) {
+    duplicateDetection = buildSkippedDuplicateDetection('error');
+    log.warning(`Duplicate detection failed for ${owner}/${repo}#${pullNumber}. Continuing triage.`);
+    log.error(error);
+  }
 
   const commits = await github.paginate(github.rest.pulls.listCommits, {
     owner,
@@ -705,6 +872,7 @@ async function runTriageForPullRequest({ github, owner, repo, pullNumber, config
     skipReason: null,
     analysis,
     desiredLabels,
+    duplicateDetection,
   };
 }
 
@@ -722,6 +890,7 @@ async function runTriage({ github, context, core, config }) {
     repo: context.repo.repo,
     pullNumber: pullRequest.number,
     config,
+    eventAction: context.payload.action,
     logger: {
       info: core.info.bind(core),
       warning: core.warning.bind(core),
