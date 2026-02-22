@@ -635,7 +635,7 @@ async function runDuplicateCheckForPullRequest({
     return buildSkippedDuplicateDetection('disabled');
   }
 
-  if (effectiveDuplicateConfig.onlyOnOpened && eventAction && eventAction !== 'opened') {
+  if (effectiveDuplicateConfig.onlyOnOpened && eventAction && eventAction !== 'opened' && eventAction !== 'reopened') {
     return buildSkippedDuplicateDetection('non-opened-action');
   }
 
