@@ -653,6 +653,33 @@ async function detectDuplicatePullRequest({
       `Duplicate scan for ${owner}/${repo}#${currentPullRequest.number}: ` +
         `pool=${candidatePool.length}, compared=${compared.length}, matches=${topMatches.length}, reverts=${revertMatches.length}`,
     );
+
+    const nearMisses = compared
+      .filter((entry) => !entry.similarity.isDuplicate)
+      .sort((left, right) => right.similarity.confidence - left.similarity.confidence)
+      .slice(0, 5);
+
+    if (nearMisses.length > 0) {
+      logger.info(`  Top ${nearMisses.length} non-duplicate candidate(s) by confidence:`);
+      for (const entry of nearMisses) {
+        const m = entry.similarity.metrics;
+        const t = effectiveConfig;
+        const failReasons = [];
+        if (!m.patchIdMatch && !m.normalizedDiffHashMatch) {
+          if (m.fileOverlap < t.fileOverlapThreshold)
+            failReasons.push(`file-overlap ${formatPercent(m.fileOverlap)} < ${formatPercent(t.fileOverlapThreshold)}`);
+          if (m.fileOverlap >= t.fileOverlapThreshold && m.structuralSimilarity < t.structuralSimilarityThreshold)
+            failReasons.push(`structural ${formatPercent(m.structuralSimilarity)} < ${formatPercent(t.structuralSimilarityThreshold)}`);
+          if (m.fileOverlap >= t.fileOverlapThreshold && m.metadataSimilarity < t.metadataSimilarityThreshold)
+            failReasons.push(`metadata ${formatPercent(m.metadataSimilarity)} < ${formatPercent(t.metadataSimilarityThreshold)}`);
+        }
+        logger.info(
+          `  #${entry.number} (${entry.state}) confidence=${formatPercent(entry.similarity.confidence)} | ` +
+            `file-overlap=${formatPercent(m.fileOverlap)} structural=${formatPercent(m.structuralSimilarity)} metadata=${formatPercent(m.metadataSimilarity)} | ` +
+            `not-duplicate: ${failReasons.length > 0 ? failReasons.join(', ') : 'below all thresholds'}`,
+        );
+      }
+    }
   }
 
   return {
