@@ -13,24 +13,24 @@ const {
   normalizePath,
   toFrequencyMap,
   mergeSets,
-} = require('./core/utils.js');
+} = require('./core/utils');
 const {
   IMPORT_PATTERNS,
   FUNCTION_SIGNATURE_PATTERNS,
   CLASS_SIGNATURE_PATTERNS,
-} = require('./core/patterns.js');
+} = require('./core/patterns');
 const {
   jaccardSimilarity,
   cosineSimilarityFromMaps,
   cosineSimilarityFromVectors,
-} = require('./core/similarity.js');
-const { collectPullRequests, listPullRequestFiles } = require('./core/github.js');
+} = require('./core/similarity');
+const { collectPullRequests, listPullRequestFiles } = require('./core/github');
 const {
   getRepresentationCacheKey,
   getCachedRepresentation,
   setCachedRepresentation,
-} = require('./core/pr-cache.js');
-const { matchFirstGroup, tokenizeLine } = require('./core/pr-features.js');
+} = require('./core/pr-cache');
+const { matchFirstGroup, tokenizeLine } = require('./core/pr-features');
 
 const DUPLICATE_COMMENT_MARKER = '<!-- heimdall-duplicate-bot -->';
 
@@ -94,57 +94,57 @@ function buildDuplicateConfigFromEnv(env) {
   const overrides = {};
 
   if (env.DUPLICATE_DETECTION_ENABLED !== undefined) {
-    overrides.enabled = parseBoolean(
+    overrides['enabled'] = parseBoolean(
       env.DUPLICATE_DETECTION_ENABLED,
       DEFAULT_DUPLICATE_CONFIG.enabled,
     );
   }
 
   if (env.DUPLICATE_DETECTION_ONLY_ON_OPENED !== undefined) {
-    overrides.onlyOnOpened = parseBoolean(
+    overrides['onlyOnOpened'] = parseBoolean(
       env.DUPLICATE_DETECTION_ONLY_ON_OPENED,
       DEFAULT_DUPLICATE_CONFIG.onlyOnOpened,
     );
   }
 
   if (env.DUPLICATE_MAX_OPEN_CANDIDATES) {
-    overrides.maxOpenCandidates = env.DUPLICATE_MAX_OPEN_CANDIDATES;
+    overrides['maxOpenCandidates'] = env.DUPLICATE_MAX_OPEN_CANDIDATES;
   }
   if (env.DUPLICATE_MAX_MERGED_CANDIDATES) {
-    overrides.maxMergedCandidates = env.DUPLICATE_MAX_MERGED_CANDIDATES;
+    overrides['maxMergedCandidates'] = env.DUPLICATE_MAX_MERGED_CANDIDATES;
   }
   if (env.DUPLICATE_MAX_CANDIDATE_COMPARISONS) {
-    overrides.maxCandidateComparisons = env.DUPLICATE_MAX_CANDIDATE_COMPARISONS;
+    overrides['maxCandidateComparisons'] = env.DUPLICATE_MAX_CANDIDATE_COMPARISONS;
   }
   if (env.DUPLICATE_MERGED_LOOKBACK_DAYS) {
-    overrides.mergedLookbackDays = env.DUPLICATE_MERGED_LOOKBACK_DAYS;
+    overrides['mergedLookbackDays'] = env.DUPLICATE_MERGED_LOOKBACK_DAYS;
   }
   if (env.DUPLICATE_FILE_COUNT_DELTA_THRESHOLD) {
-    overrides.fileCountDeltaThreshold = env.DUPLICATE_FILE_COUNT_DELTA_THRESHOLD;
+    overrides['fileCountDeltaThreshold'] = env.DUPLICATE_FILE_COUNT_DELTA_THRESHOLD;
   }
   if (env.DUPLICATE_TOP_LEVEL_DIR_OVERLAP_THRESHOLD) {
-    overrides.topLevelDirOverlapThreshold = env.DUPLICATE_TOP_LEVEL_DIR_OVERLAP_THRESHOLD;
+    overrides['topLevelDirOverlapThreshold'] = env.DUPLICATE_TOP_LEVEL_DIR_OVERLAP_THRESHOLD;
   }
   if (env.DUPLICATE_FILE_OVERLAP_THRESHOLD) {
-    overrides.fileOverlapThreshold = env.DUPLICATE_FILE_OVERLAP_THRESHOLD;
+    overrides['fileOverlapThreshold'] = env.DUPLICATE_FILE_OVERLAP_THRESHOLD;
   }
   if (env.DUPLICATE_STRUCTURAL_SIMILARITY_THRESHOLD) {
-    overrides.structuralSimilarityThreshold = env.DUPLICATE_STRUCTURAL_SIMILARITY_THRESHOLD;
+    overrides['structuralSimilarityThreshold'] = env.DUPLICATE_STRUCTURAL_SIMILARITY_THRESHOLD;
   }
   if (env.DUPLICATE_METADATA_SIMILARITY_THRESHOLD) {
-    overrides.metadataSimilarityThreshold = env.DUPLICATE_METADATA_SIMILARITY_THRESHOLD;
+    overrides['metadataSimilarityThreshold'] = env.DUPLICATE_METADATA_SIMILARITY_THRESHOLD;
   }
   if (env.DUPLICATE_CANDIDATE_FETCH_CONCURRENCY) {
-    overrides.candidateFetchConcurrency = env.DUPLICATE_CANDIDATE_FETCH_CONCURRENCY;
+    overrides['candidateFetchConcurrency'] = env.DUPLICATE_CANDIDATE_FETCH_CONCURRENCY;
   }
   if (env.DUPLICATE_MAX_PATCH_CHARS_PER_FILE) {
-    overrides.maxPatchCharactersPerFile = env.DUPLICATE_MAX_PATCH_CHARS_PER_FILE;
+    overrides['maxPatchCharactersPerFile'] = env.DUPLICATE_MAX_PATCH_CHARS_PER_FILE;
   }
   if (env.DUPLICATE_METADATA_VECTOR_SIZE) {
-    overrides.metadataVectorSize = env.DUPLICATE_METADATA_VECTOR_SIZE;
+    overrides['metadataVectorSize'] = env.DUPLICATE_METADATA_VECTOR_SIZE;
   }
   if (env.DUPLICATE_MAX_REPORTED_MATCHES) {
-    overrides.maxReportedMatches = env.DUPLICATE_MAX_REPORTED_MATCHES;
+    overrides['maxReportedMatches'] = env.DUPLICATE_MAX_REPORTED_MATCHES;
   }
 
   return normalizeDuplicateConfig(overrides);
@@ -516,7 +516,7 @@ async function detectDuplicatePullRequest({
   currentPullRequest,
   currentFiles,
   config,
-  logger,
+  logger = null,
 }) {
   const effectiveConfig = normalizeDuplicateConfig(config);
 

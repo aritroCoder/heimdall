@@ -5,15 +5,20 @@
   "description": "Heimdall: The all-seeing GitHub PR guardian that filters AI slop and low-effort contributions.",
   "type": "commonjs",
   "scripts": {
-    "test": "node --test",
-    "build": "node --check src/triage.js && node --check src/duplicate-pr.js && node --check src/server.js",
-    "start": "node src/server.js"
+    "test": "tsx --test test/*.test.ts",
+    "build": "tsc --noEmit",
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
     "@octokit/app": "^16.1.0",
-    "@octokit/webhooks": "^14.1.0"
+    "@octokit/webhooks": "^14.1.0",
+    "tsx": "^4.21.0"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.0",
+    "typescript": "^5.9.3"
   }
 }

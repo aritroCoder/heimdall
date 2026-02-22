@@ -1,6 +1,6 @@
 "use strict";
 
-const { normalizeCodeLine } = require('./utils.js');
+const { normalizeCodeLine } = require('./utils');
 
 const STOP_WORDS = new Set([
   'a',

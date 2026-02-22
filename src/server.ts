@@ -4,8 +4,8 @@ const { createServer } = require('node:http');
 const { readFile } = require('node:fs/promises');
 const { join, extname } = require('node:path');
 
-const { buildConfigFromEnv, runTriageForPullRequest } = require('./triage.js');
-const { buildDuplicateConfigFromEnv } = require('./duplicate-pr.js');
+const { buildConfigFromEnv, runTriageForPullRequest } = require('./triage');
+const { buildDuplicateConfigFromEnv } = require('./duplicate-pr');
 
 const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
   'opened',
@@ -44,7 +44,7 @@ function getPort(env) {
 }
 
 function createFallbackPaginate(request) {
-  return async (routeOrMethod, params = {}) => {
+  return async (routeOrMethod, params: { per_page?: number; page?: number; [key: string]: unknown } = {}) => {
     const results = [];
     const perPage = params.per_page || 100;
     let page = params.page || 1;
@@ -139,7 +139,7 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
     },
   });
 
-  app.webhooks.on('pull_request', async ({ payload }) => {
+  app.webhooks.on('pull_request', async ({ payload }: { payload: any }) => {
     if (!SUPPORTED_PULL_REQUEST_ACTIONS.has(payload.action)) {
       return;
     }
@@ -262,7 +262,7 @@ async function startServer({ env = process.env, logger = console } = {}) {
     webhookMiddleware(req, res, () => serveSiteFile(req, res));
   });
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     server.listen(port, () => {
       logger.info(`GitHub App webhook server listening on port ${port}.`);
       resolve();

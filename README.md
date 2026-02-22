@@ -165,7 +165,7 @@ export GITHUB_WEBHOOK_SECRET=your-secret
 export PORT=3000
 
 # Run with a process manager
-npx pm2 start src/server.js --name pr-triage
+npx pm2 start npm --name pr-triage -- start
 ```
 
 If using Docker, create a `Dockerfile`:
@@ -177,7 +177,7 @@ COPY package*.json ./
 RUN npm install --production
 COPY src/ ./src/
 EXPOSE 3000
-CMD ["node", "src/server.js"]
+CMD ["npm", "start"]
 ```
 
 ```bash

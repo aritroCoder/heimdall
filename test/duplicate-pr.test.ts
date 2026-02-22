@@ -11,7 +11,7 @@ const {
   detectDuplicatePullRequest,
   evaluateCandidateSimilarity,
   normalizeDuplicateConfig,
-} = require('../src/duplicate-pr.js');
+} = require('../src/duplicate-pr');
 
 function createPullRequest(number, overrides = {}) {
   return {

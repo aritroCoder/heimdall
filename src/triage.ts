@@ -5,7 +5,7 @@ const {
   buildDuplicateCommentBody,
   detectDuplicatePullRequest,
   normalizeDuplicateConfig,
-} = require('./duplicate-pr.js');
+} = require('./duplicate-pr');
 
 const BOT_COMMENT_MARKER = '<!-- heimdall-bot -->';
 
@@ -110,16 +110,18 @@ function normalizeConfig(inputConfig) {
 function buildConfigFromEnv(env) {
   const overrides = {};
 
-  if (env.TRIAGE_AI_SLOP_THRESHOLD) overrides.aiSlopThreshold = env.TRIAGE_AI_SLOP_THRESHOLD;
-  if (env.TRIAGE_LOW_EFFORT_THRESHOLD) overrides.lowEffortThreshold = env.TRIAGE_LOW_EFFORT_THRESHOLD;
-  if (env.TRIAGE_AI_SLOP_LABEL) overrides.aiSlopLabel = env.TRIAGE_AI_SLOP_LABEL;
-  if (env.TRIAGE_LOW_EFFORT_LABEL) overrides.lowEffortLabel = env.TRIAGE_LOW_EFFORT_LABEL;
-  if (env.TRIAGE_HUMAN_REVIEWED_LABEL) overrides.humanReviewedLabel = env.TRIAGE_HUMAN_REVIEWED_LABEL;
-  if (env.TRIAGE_TRUSTED_AUTHORS) overrides.trustedAuthors = parseCsv(env.TRIAGE_TRUSTED_AUTHORS);
-  if (env.TRIAGE_TRUSTED_TITLE_REGEX) overrides.trustedTitlePatterns = parseCsv(env.TRIAGE_TRUSTED_TITLE_REGEX);
-  if (env.TRIAGE_MIN_FINDINGS) overrides.minFindingsForLabel = env.TRIAGE_MIN_FINDINGS;
-  if (env.TRIAGE_SIZE_THRESHOLDS) overrides.sizeThresholds = parseCsv(env.TRIAGE_SIZE_THRESHOLDS).map(Number);
-  if (env.TRIAGE_SIZE_LABELS) overrides.sizeLabels = parseCsv(env.TRIAGE_SIZE_LABELS);
+  if (env.TRIAGE_AI_SLOP_THRESHOLD) overrides['aiSlopThreshold'] = env.TRIAGE_AI_SLOP_THRESHOLD;
+  if (env.TRIAGE_LOW_EFFORT_THRESHOLD) overrides['lowEffortThreshold'] = env.TRIAGE_LOW_EFFORT_THRESHOLD;
+  if (env.TRIAGE_AI_SLOP_LABEL) overrides['aiSlopLabel'] = env.TRIAGE_AI_SLOP_LABEL;
+  if (env.TRIAGE_LOW_EFFORT_LABEL) overrides['lowEffortLabel'] = env.TRIAGE_LOW_EFFORT_LABEL;
+  if (env.TRIAGE_HUMAN_REVIEWED_LABEL) overrides['humanReviewedLabel'] = env.TRIAGE_HUMAN_REVIEWED_LABEL;
+  if (env.TRIAGE_TRUSTED_AUTHORS) overrides['trustedAuthors'] = parseCsv(env.TRIAGE_TRUSTED_AUTHORS);
+  if (env.TRIAGE_TRUSTED_TITLE_REGEX)
+    overrides['trustedTitlePatterns'] = parseCsv(env.TRIAGE_TRUSTED_TITLE_REGEX);
+  if (env.TRIAGE_MIN_FINDINGS) overrides['minFindingsForLabel'] = env.TRIAGE_MIN_FINDINGS;
+  if (env.TRIAGE_SIZE_THRESHOLDS)
+    overrides['sizeThresholds'] = parseCsv(env.TRIAGE_SIZE_THRESHOLDS).map(Number);
+  if (env.TRIAGE_SIZE_LABELS) overrides['sizeLabels'] = parseCsv(env.TRIAGE_SIZE_LABELS);
 
   return normalizeConfig(overrides);
 }
@@ -707,7 +709,7 @@ async function runTriageForPullRequest({
   repo,
   pullNumber,
   config,
-  duplicateConfig,
+  duplicateConfig = null,
   eventAction,
   logger,
 }) {
@@ -804,7 +806,7 @@ async function runTriageForPullRequest({
     per_page: 100,
   });
 
-  let duplicateDetection = buildSkippedDuplicateDetection('not-run');
+  let duplicateDetection: any = buildSkippedDuplicateDetection('not-run');
   try {
     duplicateDetection = await runDuplicateCheckForPullRequest({
       github,

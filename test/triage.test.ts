@@ -9,7 +9,7 @@ const {
   determineSizeLabel,
   getDesiredLabels,
   DEFAULT_CONFIG,
-} = require('../src/triage.js');
+} = require('../src/triage');
 
 test('scores docs-only pull requests without bypassing', () => {
   const analysis = analyzePullRequest({
