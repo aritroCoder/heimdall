@@ -539,6 +539,7 @@ async function upsertDuplicateComment({ github, owner, repo, issueNumber, body }
 }
 
 async function upsertManagedComment({ github, owner, repo, issueNumber, body, marker }) {
+  // if already comment posted for duplicate PR, update instead of creating new comment
   const existingComment = await findExistingManagedComment({
     github,
     owner,
@@ -661,8 +662,8 @@ async function runDuplicateCheckForPullRequest({
       detectionResult: duplicateResult,
       currentPullRequest: fullPullRequest,
     });
-
     if (commentBody) {
+      log.info(`Posting duplicate comment on ${owner}/${repo}#${pullNumber} (matches=${duplicateResult.matches.length}).`);
       await upsertDuplicateComment({
         github,
         owner,
@@ -670,6 +671,8 @@ async function runDuplicateCheckForPullRequest({
         issueNumber: pullNumber,
         body: commentBody,
       });
+    } else {
+      log.warning(`Duplicate flagged for ${owner}/${repo}#${pullNumber} but comment body was empty; skipping upsert.`);
     }
   } else if (duplicateResult.checked) {
     await deleteDuplicateComment({ github, owner, repo, issueNumber: pullNumber });

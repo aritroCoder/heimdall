@@ -36,7 +36,7 @@ const DUPLICATE_COMMENT_MARKER = '<!-- heimdall-duplicate-bot -->';
 
 const DEFAULT_DUPLICATE_CONFIG = Object.freeze({
   enabled: true,
-  onlyOnOpened: true,
+  onlyOnOpened: false,
   maxOpenCandidates: 80,
   maxMergedCandidates: 140,
   maxCandidateComparisons: 60,
@@ -575,6 +575,13 @@ async function detectDuplicatePullRequest({
 
   const candidatePool = [...candidateByNumber.values()]
     .sort((left, right) => {
+      // Prefer open PRs over closed/merged so that an active duplicate is always
+      // evaluated before an older merged one when the pool is capped.
+      const leftIsOpen = !left.merged_at && left.state === 'open' ? 0 : 1;
+      const rightIsOpen = !right.merged_at && right.state === 'open' ? 0 : 1;
+      if (leftIsOpen !== rightIsOpen) {
+        return leftIsOpen - rightIsOpen;
+      }
       const leftTs = Date.parse(left.updated_at || left.created_at || 0);
       const rightTs = Date.parse(right.updated_at || right.created_at || 0);
       return rightTs - leftTs;
