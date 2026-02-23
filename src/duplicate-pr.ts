@@ -1,6 +1,6 @@
 'use strict';
 
-const {
+import {
   clamp,
   formatPercent,
   getTopLevelDirectory,
@@ -13,28 +13,55 @@ const {
   normalizePath,
   toFrequencyMap,
   mergeSets,
-} = require('./core/utils');
-const {
+} from './core/utils';
+import {
   IMPORT_PATTERNS,
   FUNCTION_SIGNATURE_PATTERNS,
   CLASS_SIGNATURE_PATTERNS,
-} = require('./core/patterns');
-const {
+} from './core/patterns';
+import {
   jaccardSimilarity,
   cosineSimilarityFromMaps,
   cosineSimilarityFromVectors,
-} = require('./core/similarity');
-const { collectPullRequests, listPullRequestFiles } = require('./core/github');
-const {
+} from './core/similarity';
+import { collectPullRequests, listPullRequestFiles } from './core/github';
+import {
   getRepresentationCacheKey,
   getCachedRepresentation,
   setCachedRepresentation,
-} = require('./core/pr-cache');
-const { matchFirstGroup, tokenizeLine } = require('./core/pr-features');
+} from './core/pr-cache';
+import { matchFirstGroup, tokenizeLine } from './core/pr-features';
+import type {
+  DuplicateConfig,
+  DuplicateConfigInput,
+  DuplicateDetectionResult,
+  DuplicateMatch,
+  DuplicateReason,
+  DuplicateSimilarity,
+  EnvMap,
+  GithubClient,
+  GithubPullRequest,
+  GithubPullRequestFile,
+  LoggerLike,
+  PullRequestRepresentation,
+} from './types';
 
-const DUPLICATE_COMMENT_MARKER = '<!-- heimdall-duplicate-bot -->';
+interface FileFeatures {
+  filename: string;
+  topLevelDirectory: string;
+  addedLines: string[];
+  removedLines: string[];
+  addedTokens: string[];
+  removedTokens: string[];
+  importsAdded: Set<string>;
+  importsRemoved: Set<string>;
+  changedFunctions: Set<string>;
+  changedClasses: Set<string>;
+}
 
-const DEFAULT_DUPLICATE_CONFIG = Object.freeze({
+export const DUPLICATE_COMMENT_MARKER = '<!-- heimdall-duplicate-bot -->';
+
+export const DEFAULT_DUPLICATE_CONFIG: Readonly<DuplicateConfig> = Object.freeze({
   enabled: true,
   onlyOnOpened: false,
   maxOpenCandidates: 80,
@@ -52,7 +79,7 @@ const DEFAULT_DUPLICATE_CONFIG = Object.freeze({
   maxReportedMatches: 3,
 });
 
-function normalizeDuplicateConfig(inputConfig) {
+export function normalizeDuplicateConfig(inputConfig: DuplicateConfigInput | null | undefined): DuplicateConfig {
   const config = { ...DEFAULT_DUPLICATE_CONFIG, ...inputConfig };
 
   return {
@@ -90,8 +117,8 @@ function normalizeDuplicateConfig(inputConfig) {
   };
 }
 
-function buildDuplicateConfigFromEnv(env) {
-  const overrides = {};
+export function buildDuplicateConfigFromEnv(env: EnvMap): DuplicateConfig {
+  const overrides: DuplicateConfigInput = {};
 
   if (env.DUPLICATE_DETECTION_ENABLED !== undefined) {
     overrides['enabled'] = parseBoolean(
@@ -150,21 +177,24 @@ function buildDuplicateConfigFromEnv(env) {
   return normalizeDuplicateConfig(overrides);
 }
 
-function buildFileFeatures(file, config) {
+function buildFileFeatures(
+  file: GithubPullRequestFile,
+  config: Pick<DuplicateConfig, 'maxPatchCharactersPerFile'>,
+): FileFeatures {
   const filename = normalizePath(file.filename);
   const patchSource = typeof file.patch === 'string' ? file.patch : '';
   const patch = patchSource.slice(0, config.maxPatchCharactersPerFile);
   const lines = patch.split('\n');
 
-  const addedLines = [];
-  const removedLines = [];
-  const addedTokens = [];
-  const removedTokens = [];
+  const addedLines: string[] = [];
+  const removedLines: string[] = [];
+  const addedTokens: string[] = [];
+  const removedTokens: string[] = [];
 
-  const importsAdded = new Set();
-  const importsRemoved = new Set();
-  const changedFunctions = new Set();
-  const changedClasses = new Set();
+  const importsAdded = new Set<string>();
+  const importsRemoved = new Set<string>();
+  const changedFunctions = new Set<string>();
+  const changedClasses = new Set<string>();
 
   for (const line of lines) {
     if (!line || line.startsWith('@@')) {
@@ -230,7 +260,7 @@ function buildFileFeatures(file, config) {
   };
 }
 
-function fnv1aHash32(value) {
+function fnv1aHash32(value: string): number {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index);
@@ -239,8 +269,8 @@ function fnv1aHash32(value) {
   return hash >>> 0;
 }
 
-function buildFeatureHashVector(text, vectorSize) {
-  const vector = new Array(vectorSize).fill(0);
+function buildFeatureHashVector(text: string, vectorSize: number): number[] {
+  const vector = new Array<number>(vectorSize).fill(0);
   const tokens = tokenizeLine(String(text || ''));
 
   for (const token of tokens) {
@@ -258,20 +288,28 @@ function buildFeatureHashVector(text, vectorSize) {
   return vector.map((value) => value / magnitude);
 }
 
-function buildPullRequestRepresentation({ pr, files, config }) {
+export function buildPullRequestRepresentation({
+  pr,
+  files,
+  config,
+}: {
+  pr: GithubPullRequest;
+  files: GithubPullRequestFile[];
+  config: DuplicateConfig;
+}): PullRequestRepresentation {
   const fileFeatures = files.map((file) => buildFileFeatures(file, config));
 
-  const fileSet = new Set();
-  const topLevelDirectories = new Set();
-  const changedFunctions = new Set();
-  const changedClasses = new Set();
-  const importsAdded = new Set();
-  const importsRemoved = new Set();
+  const fileSet = new Set<string>();
+  const topLevelDirectories = new Set<string>();
+  const changedFunctions = new Set<string>();
+  const changedClasses = new Set<string>();
+  const importsAdded = new Set<string>();
+  const importsRemoved = new Set<string>();
 
-  const allAddedLines = [];
-  const allRemovedLines = [];
-  const allAddedTokens = [];
-  const allRemovedTokens = [];
+  const allAddedLines: string[] = [];
+  const allRemovedLines: string[] = [];
+  const allAddedTokens: string[] = [];
+  const allRemovedTokens: string[] = [];
 
   for (const feature of fileFeatures) {
     fileSet.add(feature.filename);
@@ -319,7 +357,7 @@ function buildPullRequestRepresentation({ pr, files, config }) {
 
   return {
     prNumber: pr.number,
-    prId: pr.id,
+    prId: pr.id ?? null,
     title: pr.title || '',
     body: pr.body || '',
     htmlUrl: pr.html_url || '',
@@ -343,7 +381,11 @@ function buildPullRequestRepresentation({ pr, files, config }) {
   };
 }
 
-function evaluateCandidateSimilarity(currentRepresentation, candidateRepresentation, config) {
+export function evaluateCandidateSimilarity(
+  currentRepresentation: PullRequestRepresentation,
+  candidateRepresentation: PullRequestRepresentation,
+  config: DuplicateConfig,
+): DuplicateSimilarity {
   const fileOverlap = jaccardSimilarity(currentRepresentation.fileSet, candidateRepresentation.fileSet);
   const topLevelDirOverlap = jaccardSimilarity(
     currentRepresentation.topLevelDirectories,
@@ -415,7 +457,7 @@ function evaluateCandidateSimilarity(currentRepresentation, candidateRepresentat
     );
   }
 
-  let reason = 'none';
+  let reason: DuplicateReason = 'none';
   if (exactDuplicate) {
     reason = patchIdMatch ? 'patch-id-match' : 'normalized-diff-hash-match';
   } else if (metadataDuplicate) {
@@ -447,7 +489,7 @@ function evaluateCandidateSimilarity(currentRepresentation, candidateRepresentat
   };
 }
 
-function toHumanReason(reason) {
+function toHumanReason(reason: DuplicateReason): string {
   if (reason === 'patch-id-match') {
     return 'Exact patch fingerprint match';
   }
@@ -467,7 +509,13 @@ function toHumanReason(reason) {
   return 'Similarity match';
 }
 
-function buildDuplicateCommentBody({ detectionResult, currentPullRequest }) {
+export function buildDuplicateCommentBody({
+  detectionResult,
+  currentPullRequest,
+}: {
+  detectionResult: DuplicateDetectionResult | null | undefined;
+  currentPullRequest: GithubPullRequest;
+}): string {
   if (!detectionResult || !detectionResult.flagged || !Array.isArray(detectionResult.matches)) {
     return '';
   }
@@ -499,9 +547,9 @@ function buildDuplicateCommentBody({ detectionResult, currentPullRequest }) {
 
   lines.push(
     '',
-    `Thresholds used: file overlap >= ${formatPercent(detectionResult.thresholds.fileOverlap)}, ` +
-      `structural >= ${formatPercent(detectionResult.thresholds.structuralSimilarity)}, ` +
-    `metadata >= ${formatPercent(detectionResult.thresholds.metadataSimilarity)}.`,
+    `Thresholds used: file overlap >= ${formatPercent(detectionResult.thresholds!.fileOverlap)}, ` +
+      `structural >= ${formatPercent(detectionResult.thresholds!.structuralSimilarity)}, ` +
+    `metadata >= ${formatPercent(detectionResult.thresholds!.metadataSimilarity)}.`,
     '',
     'If this is intentional, keep this PR open and ignore this notice.',
   );
@@ -509,7 +557,7 @@ function buildDuplicateCommentBody({ detectionResult, currentPullRequest }) {
   return lines.join('\n');
 }
 
-async function detectDuplicatePullRequest({
+export async function detectDuplicatePullRequest({
   github,
   owner,
   repo,
@@ -517,7 +565,15 @@ async function detectDuplicatePullRequest({
   currentFiles,
   config,
   logger = null,
-}) {
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  currentPullRequest: GithubPullRequest;
+  currentFiles: GithubPullRequestFile[];
+  config: DuplicateConfigInput | DuplicateConfig | null | undefined;
+  logger?: LoggerLike | null;
+}): Promise<DuplicateDetectionResult> {
   const effectiveConfig = normalizeDuplicateConfig(config);
 
   if (!effectiveConfig.enabled) {
@@ -530,6 +586,7 @@ async function detectDuplicatePullRequest({
       matches: [],
       bestMatch: null,
       reverts: [],
+      thresholds: null,
     };
   }
 
@@ -558,7 +615,7 @@ async function detectDuplicatePullRequest({
     }),
   ]);
 
-  const candidateByNumber = new Map();
+  const candidateByNumber = new Map<number, GithubPullRequest>();
   for (const candidate of [...openCandidates, ...mergedCandidates]) {
     if (!candidate || candidate.number === currentPullRequest.number) {
       continue;
@@ -582,8 +639,8 @@ async function detectDuplicatePullRequest({
       if (leftIsOpen !== rightIsOpen) {
         return leftIsOpen - rightIsOpen;
       }
-      const leftTs = Date.parse(left.updated_at || left.created_at || 0);
-      const rightTs = Date.parse(right.updated_at || right.created_at || 0);
+      const leftTs = Date.parse(left.updated_at || left.created_at || '');
+      const rightTs = Date.parse(right.updated_at || right.created_at || '');
       return rightTs - leftTs;
     })
     .slice(0, effectiveConfig.maxCandidateComparisons);
@@ -644,7 +701,7 @@ async function detectDuplicatePullRequest({
     },
   );
 
-  const compared = evaluations.filter(Boolean);
+  const compared = evaluations.filter((value): value is DuplicateMatch => value !== null);
   const duplicateMatches = compared
     .filter((entry) => entry.similarity.isDuplicate)
     .sort((left, right) => right.similarity.confidence - left.similarity.confidence);
@@ -674,7 +731,7 @@ async function detectDuplicatePullRequest({
       for (const entry of nearMisses) {
         const m = entry.similarity.metrics;
         const t = effectiveConfig;
-        const failReasons = [];
+        const failReasons: string[] = [];
         if (!m.patchIdMatch && !m.normalizedDiffHashMatch) {
           if (m.fileOverlap < t.fileOverlapThreshold)
             failReasons.push(`file-overlap ${formatPercent(m.fileOverlap)} < ${formatPercent(t.fileOverlapThreshold)}`);
@@ -709,18 +766,10 @@ async function detectDuplicatePullRequest({
   };
 }
 
-module.exports = {
-  DEFAULT_DUPLICATE_CONFIG,
-  DUPLICATE_COMMENT_MARKER,
-  buildDuplicateCommentBody,
-  buildDuplicateConfigFromEnv,
-  buildPullRequestRepresentation,
+export {
   cosineSimilarityFromMaps,
   cosineSimilarityFromVectors,
-  detectDuplicatePullRequest,
-  evaluateCandidateSimilarity,
   getTopLevelDirectory,
   jaccardSimilarity,
   normalizeCodeLine,
-  normalizeDuplicateConfig,
 };

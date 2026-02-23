@@ -1,7 +1,23 @@
-"use strict";
+'use strict';
 
-async function collectPullRequests({ github, owner, repo, state, limit, mergedLookbackDays }) {
-  const results = [];
+import type { GithubClient, GithubPullRequest, GithubPullRequestFile } from '../types';
+
+export async function collectPullRequests({
+  github,
+  owner,
+  repo,
+  state,
+  limit,
+  mergedLookbackDays,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  state: string;
+  limit: number;
+  mergedLookbackDays: number;
+}): Promise<GithubPullRequest[]> {
+  const results: GithubPullRequest[] = [];
   const perPage = 100;
   const maxPages = Math.max(1, Math.ceil(limit / perPage) + 2);
   const nowMs = Date.now();
@@ -48,7 +64,17 @@ async function collectPullRequests({ github, owner, repo, state, limit, mergedLo
   return results;
 }
 
-async function listPullRequestFiles({ github, owner, repo, pullNumber }) {
+export async function listPullRequestFiles({
+  github,
+  owner,
+  repo,
+  pullNumber,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  pullNumber: number;
+}): Promise<GithubPullRequestFile[]> {
   return github.paginate(github.rest.pulls.listFiles, {
     owner,
     repo,
@@ -56,8 +82,3 @@ async function listPullRequestFiles({ github, owner, repo, pullNumber }) {
     per_page: 100,
   });
 }
-
-module.exports = {
-  collectPullRequests,
-  listPullRequestFiles,
-};

@@ -1,13 +1,33 @@
 'use strict';
 
-const { createServer } = require('node:http');
-const { readFile } = require('node:fs/promises');
-const { join, extname } = require('node:path');
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { join, extname } from 'node:path';
 
-const { buildConfigFromEnv, runTriageForPullRequest } = require('./triage');
-const { buildDuplicateConfigFromEnv } = require('./duplicate-pr');
+import { buildConfigFromEnv, runTriageForPullRequest } from './triage';
+import { buildDuplicateConfigFromEnv } from './duplicate-pr';
+import type {
+  EnvMap,
+  GithubClient,
+  GithubIssueComment,
+  GithubPullRequest,
+  LoggerLike,
+  PullRequestEventPayload,
+  TriageFinding,
+} from './types';
 
-const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
+interface ServerLogger extends LoggerLike {
+  info: (...args: readonly unknown[]) => void;
+  error: (...args: readonly unknown[]) => void;
+}
+
+type FallbackRequestParams = { per_page?: number; page?: number } & Record<string, unknown>;
+type RequestMethod = (
+  routeOrMethod: string,
+  params: FallbackRequestParams,
+) => Promise<{ data: unknown }>;
+
+export const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
   'opened',
   'reopened',
   'synchronize',
@@ -17,7 +37,7 @@ const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
   'unlabeled',
 ]);
 
-function normalizePrivateKey(privateKey) {
+export function normalizePrivateKey(privateKey: string | null | undefined): string {
   if (!privateKey) {
     return '';
   }
@@ -25,7 +45,7 @@ function normalizePrivateKey(privateKey) {
   return privateKey.replace(/\\n/g, '\n');
 }
 
-function requireEnv(name, env) {
+function requireEnv(name: string, env: EnvMap): string {
   const value = env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -34,7 +54,7 @@ function requireEnv(name, env) {
   return value;
 }
 
-function getPort(env) {
+export function getPort(env: EnvMap): number {
   const parsed = Number.parseInt(env.PORT || '3000', 10);
   if (Number.isNaN(parsed) || parsed <= 0) {
     return 3000;
@@ -43,26 +63,31 @@ function getPort(env) {
   return parsed;
 }
 
-function createFallbackPaginate(request) {
-  return async (routeOrMethod, params: { per_page?: number; page?: number; [key: string]: unknown } = {}) => {
-    const results = [];
-    const perPage = params.per_page || 100;
-    let page = params.page || 1;
+export function createFallbackPaginate(request: RequestMethod): GithubClient['paginate'] {
+  return async function fallbackPaginate<TParams extends Record<string, unknown>, TItem>(
+    routeOrMethod: ((params: TParams) => Promise<{ data: TItem[] }>) | string,
+    params = {} as TParams,
+  ): Promise<TItem[]> {
+    const typedParams = params as TParams & { per_page?: number; page?: number };
+    const results: TItem[] = [];
+    const perPage = typedParams.per_page || 100;
+    let page = typedParams.page || 1;
 
     while (true) {
-      const pageParams = { ...params, per_page: perPage, page };
+      const pageParams = { ...typedParams, per_page: perPage, page };
       const response =
         typeof routeOrMethod === 'function'
-          ? await routeOrMethod(pageParams)
+          ? await routeOrMethod(pageParams as TParams)
           : await request(routeOrMethod, pageParams);
 
       if (!response || !Array.isArray(response.data)) {
-        return response && response.data;
+        return (response?.data || []) as TItem[];
       }
 
-      results.push(...response.data);
+      const pageData = response.data as TItem[];
+      results.push(...pageData);
 
-      if (response.data.length < perPage) {
+      if (pageData.length < perPage) {
         return results;
       }
 
@@ -75,51 +100,88 @@ function createFallbackPaginate(request) {
   };
 }
 
-function createRestCompatClient(octokit) {
-  if (octokit && octokit.rest && octokit.paginate) {
-    return octokit;
+export function createRestCompatClient(octokit: unknown): GithubClient {
+  const candidate = octokit as {
+    rest?: GithubClient['rest'];
+    paginate?: GithubClient['paginate'];
+    request?: (routeOrMethod: string, params: FallbackRequestParams) => Promise<{ data: unknown }>;
+  };
+
+  if (candidate.rest && typeof candidate.paginate === 'function') {
+    return {
+      rest: candidate.rest,
+      paginate: candidate.paginate.bind(octokit),
+    };
   }
 
-  if (!octokit || typeof octokit.request !== 'function') {
+  if (!candidate || typeof candidate.request !== 'function') {
     throw new Error('Octokit request client is unavailable for webhook event.');
   }
 
-  const request = octokit.request.bind(octokit);
+  const request = candidate.request.bind(octokit) as RequestMethod;
   const paginate =
-    typeof octokit.paginate === 'function'
-      ? octokit.paginate.bind(octokit)
+    typeof candidate.paginate === 'function'
+      ? candidate.paginate.bind(octokit)
       : createFallbackPaginate(request);
 
-  return {
-    rest: {
-      pulls: {
-        get: (params) => request('GET /repos/{owner}/{repo}/pulls/{pull_number}', params),
-        list: (params) => request('GET /repos/{owner}/{repo}/pulls', params),
-        listFiles: (params) => request('GET /repos/{owner}/{repo}/pulls/{pull_number}/files', params),
-        listCommits: (params) =>
-          request('GET /repos/{owner}/{repo}/pulls/{pull_number}/commits', params),
-      },
-      issues: {
-        createLabel: (params) => request('POST /repos/{owner}/{repo}/labels', params),
-        addLabels: (params) =>
-          request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', params),
-        removeLabel: (params) =>
-          request('DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}', params),
-        listComments: (params) =>
-          request('GET /repos/{owner}/{repo}/issues/{issue_number}/comments', params),
-        updateComment: (params) =>
-          request('PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}', params),
-        createComment: (params) =>
-          request('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', params),
-        deleteComment: (params) =>
-          request('DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}', params),
-      },
+  const requestRoute = <TData>(
+    routeOrMethod: string,
+    params: unknown,
+  ): Promise<{ data: TData }> => {
+    return request(routeOrMethod, params as FallbackRequestParams) as Promise<{ data: TData }>;
+  };
+
+  const rest: GithubClient['rest'] = {
+    pulls: {
+      get: (params) => requestRoute<GithubPullRequest>('GET /repos/{owner}/{repo}/pulls/{pull_number}', params),
+      list: (params) => requestRoute<GithubPullRequest[]>('GET /repos/{owner}/{repo}/pulls', params),
+      listFiles: (params) =>
+        requestRoute<{ filename: string; patch?: string }[]>(
+          'GET /repos/{owner}/{repo}/pulls/{pull_number}/files',
+          params,
+        ),
+      listCommits: (params) =>
+        requestRoute<{ commit?: { message?: string | null } | null }[]>(
+          'GET /repos/{owner}/{repo}/pulls/{pull_number}/commits',
+          params,
+        ),
     },
+    issues: {
+      createLabel: (params) => requestRoute<unknown>('POST /repos/{owner}/{repo}/labels', params),
+      addLabels: (params) =>
+        requestRoute<unknown>('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', params),
+      removeLabel: (params) =>
+        requestRoute<unknown>('DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}', params),
+      listComments: (params) =>
+        requestRoute<GithubIssueComment[]>(
+          'GET /repos/{owner}/{repo}/issues/{issue_number}/comments',
+          params,
+        ),
+      updateComment: (params) =>
+        requestRoute<unknown>('PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}', params),
+      createComment: (params) =>
+        requestRoute<unknown>('POST /repos/{owner}/{repo}/issues/{issue_number}/comments', params),
+      deleteComment: (params) =>
+        requestRoute<unknown>('DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}', params),
+    },
+  };
+
+  return {
+    rest,
     paginate,
   };
 }
 
-async function createGithubApp({ env = process.env, logger = console } = {}) {
+export async function createGithubApp({
+  env = process.env,
+  logger = console,
+}: {
+  env?: EnvMap;
+  logger?: ServerLogger;
+} = {}): Promise<{
+  app: import('@octokit/app').App;
+  createNodeMiddleware: typeof import('@octokit/webhooks').createNodeMiddleware;
+}> {
   const [{ App }, { createNodeMiddleware }] = await Promise.all([
     import('@octokit/app'),
     import('@octokit/webhooks'),
@@ -139,7 +201,7 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
     },
   });
 
-  app.webhooks.on('pull_request', async ({ payload }: { payload: any }) => {
+  app.webhooks.on('pull_request', async ({ payload }: { payload: PullRequestEventPayload }) => {
     if (!SUPPORTED_PULL_REQUEST_ACTIONS.has(payload.action)) {
       return;
     }
@@ -179,17 +241,14 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
       return;
     }
 
+    if (!result.analysis) {
+      return;
+    }
+
     const { lowEffort, aiSlop } = result.analysis;
-    const duplicateDetection = result.duplicateDetection || {
-      checked: false,
-      skipReason: 'not-run',
-      flagged: false,
-      matches: [],
-    };
-    const formatFindings = (findings) =>
-      findings.length === 0
-        ? 'none'
-        : findings.map((f) => `${f.id} (+${f.points})`).join(', ');
+    const duplicateDetection = result.duplicateDetection;
+    const formatFindings = (findings: TriageFinding[]): string =>
+      findings.length === 0 ? 'none' : findings.map((f) => `${f.id} (+${f.points})`).join(', ');
     const duplicateSummary = duplicateDetection.checked
       ? `checked (flagged=${duplicateDetection.flagged}, matches=${duplicateDetection.matches.length})`
       : `skipped (${duplicateDetection.skipReason || 'unknown'})`;
@@ -206,14 +265,14 @@ async function createGithubApp({ env = process.env, logger = console } = {}) {
     );
   });
 
-  app.webhooks.onError((error) => {
+  app.webhooks.onError((error: unknown) => {
     logger.error('Webhook processing failed.', error);
   });
 
   return { app, createNodeMiddleware };
 }
 
-const MIME_TYPES = {
+const MIME_TYPES: Record<string, string> = {
   '.html': 'text/html',
   '.css': 'text/css',
   '.js': 'application/javascript',
@@ -226,11 +285,10 @@ const MIME_TYPES = {
 
 const SITE_DIR = join(__dirname, '..', 'site');
 
-async function serveSiteFile(req, res) {
-  const urlPath = req.url.split('?')[0];
+async function serveSiteFile(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const urlPath = (req.url || '/').split('?')[0];
   const filePath = urlPath === '/' ? '/index.html' : urlPath;
 
-  // Prevent path traversal
   const resolved = join(SITE_DIR, filePath);
   if (!resolved.startsWith(SITE_DIR)) {
     res.writeHead(403);
@@ -250,7 +308,13 @@ async function serveSiteFile(req, res) {
   }
 }
 
-async function startServer({ env = process.env, logger = console } = {}) {
+export async function startServer({
+  env = process.env,
+  logger = console,
+}: {
+  env?: EnvMap;
+  logger?: ServerLogger;
+} = {}): Promise<Server> {
   const { app, createNodeMiddleware } = await createGithubApp({ env, logger });
   const webhookMiddleware = createNodeMiddleware(app.webhooks, {
     path: '/api/github/webhooks',
@@ -258,8 +322,9 @@ async function startServer({ env = process.env, logger = console } = {}) {
 
   const port = getPort(env);
   const server = createServer((req, res) => {
-    // Let webhook middleware handle its path; fall through to static site
-    webhookMiddleware(req, res, () => serveSiteFile(req, res));
+    webhookMiddleware(req, res, () => {
+      void serveSiteFile(req, res);
+    });
   });
 
   await new Promise<void>((resolve, reject) => {
@@ -274,18 +339,8 @@ async function startServer({ env = process.env, logger = console } = {}) {
 }
 
 if (require.main === module) {
-  startServer().catch((error) => {
+  startServer().catch((error: unknown) => {
     console.error(error);
     process.exitCode = 1;
   });
 }
-
-module.exports = {
-  SUPPORTED_PULL_REQUEST_ACTIONS,
-  createFallbackPaginate,
-  createGithubApp,
-  createRestCompatClient,
-  getPort,
-  normalizePrivateKey,
-  startServer,
-};

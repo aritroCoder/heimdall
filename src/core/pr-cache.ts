@@ -1,10 +1,21 @@
+'use strict';
 
-"use strict";
+import type { DuplicateConfig, GithubPullRequest, PullRequestRepresentation } from '../types';
 
 const REPRESENTATION_CACHE_MAX_ENTRIES = 2000;
-const representationCache = new Map();
+const representationCache = new Map<string, PullRequestRepresentation>();
 
-function getRepresentationCacheKey({ owner, repo, pullRequest, config }) {
+export function getRepresentationCacheKey({
+  owner,
+  repo,
+  pullRequest,
+  config,
+}: {
+  owner: string;
+  repo: string;
+  pullRequest: GithubPullRequest;
+  config: Pick<DuplicateConfig, 'maxPatchCharactersPerFile' | 'metadataVectorSize'>;
+}): string {
   const updatedAt = pullRequest.updated_at || '';
   const headSha = pullRequest.head && pullRequest.head.sha ? pullRequest.head.sha : '';
   return [
@@ -18,18 +29,21 @@ function getRepresentationCacheKey({ owner, repo, pullRequest, config }) {
   ].join('|');
 }
 
-function getCachedRepresentation(cacheKey) {
+export function getCachedRepresentation(cacheKey: string): PullRequestRepresentation | null {
   if (!representationCache.has(cacheKey)) {
     return null;
   }
 
   const cachedValue = representationCache.get(cacheKey);
+  if (!cachedValue) {
+    return null;
+  }
   representationCache.delete(cacheKey);
   representationCache.set(cacheKey, cachedValue);
   return cachedValue;
 }
 
-function setCachedRepresentation(cacheKey, representation) {
+export function setCachedRepresentation(cacheKey: string, representation: PullRequestRepresentation): void {
   if (representationCache.has(cacheKey)) {
     representationCache.delete(cacheKey);
   }
@@ -43,9 +57,3 @@ function setCachedRepresentation(cacheKey, representation) {
     representationCache.delete(oldestKey);
   }
 }
-
-module.exports = {
-  getCachedRepresentation,
-  getRepresentationCacheKey,
-  setCachedRepresentation,
-};

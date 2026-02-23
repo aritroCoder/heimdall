@@ -1,7 +1,10 @@
+'use strict';
 
-"use strict";
-
-function jaccardSimilarity(setA, setB, emptySimilarity = 1) {
+export function jaccardSimilarity<TValue>(
+  setA: ReadonlySet<TValue>,
+  setB: ReadonlySet<TValue>,
+  emptySimilarity = 1,
+): number {
   if (setA.size === 0 && setB.size === 0) {
     return emptySimilarity;
   }
@@ -21,7 +24,10 @@ function jaccardSimilarity(setA, setB, emptySimilarity = 1) {
   return intersection / union;
 }
 
-function cosineSimilarityFromMaps(mapA, mapB) {
+export function cosineSimilarityFromMaps(
+  mapA: ReadonlyMap<string, number>,
+  mapB: ReadonlyMap<string, number>,
+): number {
   if (mapA.size === 0 || mapB.size === 0) {
     return 0;
   }
@@ -40,8 +46,9 @@ function cosineSimilarityFromMaps(mapA, mapB) {
 
   const [smaller, larger] = mapA.size <= mapB.size ? [mapA, mapB] : [mapB, mapA];
   for (const [token, value] of smaller.entries()) {
-    if (larger.has(token)) {
-      dot += value * larger.get(token);
+    const largerValue = larger.get(token);
+    if (largerValue !== undefined) {
+      dot += value * largerValue;
     }
   }
 
@@ -52,7 +59,10 @@ function cosineSimilarityFromMaps(mapA, mapB) {
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
 
-function cosineSimilarityFromVectors(vectorA, vectorB) {
+export function cosineSimilarityFromVectors(
+  vectorA: readonly number[],
+  vectorB: readonly number[],
+): number {
   if (vectorA.length === 0 || vectorB.length === 0 || vectorA.length !== vectorB.length) {
     return 0;
   }
@@ -75,9 +85,3 @@ function cosineSimilarityFromVectors(vectorA, vectorB) {
 
   return dot / (Math.sqrt(normA) * Math.sqrt(normB));
 }
-
-module.exports = {
-  cosineSimilarityFromMaps,
-  cosineSimilarityFromVectors,
-  jaccardSimilarity,
-};
