@@ -5,11 +5,21 @@ import assert from 'node:assert/strict';
 
 import {
   analyzePullRequest,
+  BOT_COMMENT_MARKER,
   buildConfigFromEnv,
   determineSizeLabel,
   getDesiredLabels,
+  PROCESSING_COMMENT_MARKER,
   DEFAULT_CONFIG,
+  runTriageForPullRequest,
 } from '../src/triage';
+import type {
+  GithubClient,
+  GithubIssueComment,
+  GithubPullRequest,
+  GithubPullRequestCommit,
+  GithubPullRequestFile,
+} from '../src/types';
 
 test('scores docs-only pull requests without bypassing', () => {
   const analysis = analyzePullRequest({
@@ -211,4 +221,124 @@ test('buildConfigFromEnv parses size thresholds and labels', () => {
 
   assert.deepEqual(config.sizeThresholds, [5, 50, 200, 800]);
   assert.deepEqual(config.sizeLabels, ['sz/tiny', 'sz/small', 'sz/medium', 'sz/large', 'sz/huge']);
+});
+
+test('opened event adds author label and removes processing comment after triage', async () => {
+  const files: GithubPullRequestFile[] = [];
+  for (let index = 0; index < 18; index += 1) {
+    files.push({ filename: `src/module-${index}.ts` });
+  }
+
+  const commits: GithubPullRequestCommit[] = [
+    { commit: { message: 'update' } },
+    { commit: { message: 'fix' } },
+    { commit: { message: 'cleanup' } },
+    { commit: { message: 'update' } },
+  ];
+
+  const fullPullRequest: GithubPullRequest = {
+    id: 100,
+    number: 100,
+    author_association: 'MEMBER',
+    title: 'update changes',
+    body: 'quick update',
+    state: 'open',
+    additions: 1400,
+    deletions: 300,
+    changed_files: files.length,
+    labels: [],
+    user: { login: 'alice' },
+  };
+
+  const addedLabelCalls: string[][] = [];
+  const comments: GithubIssueComment[] = [];
+  const createdCommentBodies: string[] = [];
+  let nextCommentId = 1;
+
+  const pullList = async (): Promise<{ data: GithubPullRequest[] }> => ({ data: [] });
+  const pullGet = async (): Promise<{ data: GithubPullRequest }> => ({ data: fullPullRequest });
+  const pullListFiles = async (): Promise<{ data: GithubPullRequestFile[] }> => ({ data: files });
+  const pullListCommits = async (): Promise<{ data: GithubPullRequestCommit[] }> => ({ data: commits });
+  const issueListComments = async (): Promise<{ data: GithubIssueComment[] }> => ({ data: comments });
+
+  const github: GithubClient = {
+    rest: {
+      pulls: {
+        get: pullGet,
+        list: pullList,
+        listFiles: pullListFiles,
+        listCommits: pullListCommits,
+      },
+      issues: {
+        createLabel: async () => ({}),
+        addLabels: async ({ labels }) => {
+          addedLabelCalls.push([...labels]);
+          return {};
+        },
+        removeLabel: async () => ({}),
+        listComments: issueListComments,
+        updateComment: async ({ comment_id, body }) => {
+          const existing = comments.find((comment) => comment.id === comment_id);
+          if (existing) {
+            existing.body = body;
+          }
+          return {};
+        },
+        createComment: async ({ body }) => {
+          createdCommentBodies.push(body);
+          comments.push({ id: nextCommentId, body });
+          nextCommentId += 1;
+          return {};
+        },
+        deleteComment: async ({ comment_id }) => {
+          const index = comments.findIndex((comment) => comment.id === comment_id);
+          if (index !== -1) {
+            comments.splice(index, 1);
+          }
+          return {};
+        },
+      },
+    },
+    paginate: async <TParams extends Record<string, unknown>, TItem>(
+      route: (params: TParams) => Promise<{ data: TItem[] }>,
+      _params: TParams,
+    ): Promise<TItem[]> => {
+      if (route === (pullListFiles as unknown as typeof route)) {
+        return files as unknown as TItem[];
+      }
+
+      if (route === (pullListCommits as unknown as typeof route)) {
+        return commits as unknown as TItem[];
+      }
+
+      if (route === (issueListComments as unknown as typeof route)) {
+        return comments as unknown as TItem[];
+      }
+
+      throw new Error('Unexpected pagination route in triage test.');
+    },
+  };
+
+  const result = await runTriageForPullRequest({
+    github,
+    owner: 'acme',
+    repo: 'repo',
+    pullNumber: 100,
+    config: {},
+    duplicateConfig: { enabled: false },
+    eventAction: 'opened',
+    logger: { info: () => {}, warning: () => {}, error: () => {} },
+  });
+
+  assert.equal(result.skipped, false);
+  assert.ok(addedLabelCalls.some((labels) => labels.includes('author/member')));
+  assert.ok(createdCommentBodies.some((body) => body.includes(PROCESSING_COMMENT_MARKER)));
+  assert.equal(
+    comments.some((comment) => typeof comment.body === 'string' && comment.body.includes(PROCESSING_COMMENT_MARKER)),
+    false,
+  );
+  assert.equal(
+    comments.some((comment) => typeof comment.body === 'string' && comment.body.includes(BOT_COMMENT_MARKER)),
+    true,
+  );
 });

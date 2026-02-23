@@ -30,6 +30,14 @@ import type {
 } from './types';
 
 export const BOT_COMMENT_MARKER = '<!-- heimdall-bot -->';
+export const PROCESSING_COMMENT_MARKER = '<!-- heimdall-processing -->';
+
+type AuthorCategory = 'member' | 'contributor' | 'new';
+
+const AUTHOR_LABEL_MEMBER = 'author/member';
+const AUTHOR_LABEL_CONTRIBUTOR = 'author/contributor';
+const AUTHOR_LABEL_NEW = 'author/new';
+const AUTHOR_LABELS: readonly string[] = [AUTHOR_LABEL_MEMBER, AUTHOR_LABEL_CONTRIBUTOR, AUTHOR_LABEL_NEW];
 
 export const DEFAULT_CONFIG: Readonly<TriageConfig> = Object.freeze({
   aiSlopThreshold: 45,
@@ -481,6 +489,42 @@ function matchesTrustedTitlePattern(
   return false;
 }
 
+function classifyAuthorCategory(pullRequest: GithubPullRequest): AuthorCategory {
+  const association = (pullRequest.author_association || '').toUpperCase();
+  if (association === 'OWNER' || association === 'MEMBER' || association === 'COLLABORATOR') {
+    return 'member';
+  }
+
+  if (association === 'CONTRIBUTOR') {
+    return 'contributor';
+  }
+
+  return 'new';
+}
+
+function getAuthorLabel(authorCategory: AuthorCategory): string {
+  if (authorCategory === 'member') {
+    return AUTHOR_LABEL_MEMBER;
+  }
+
+  if (authorCategory === 'contributor') {
+    return AUTHOR_LABEL_CONTRIBUTOR;
+  }
+
+  return AUTHOR_LABEL_NEW;
+}
+
+function buildProcessingCommentBody(authorCategory: AuthorCategory): string {
+  return [
+    PROCESSING_COMMENT_MARKER,
+    '## Author Status',
+    '',
+    `Classification: **${authorCategory}**`,
+    '',
+    'Heimdall is processing this PR. This may take a minute...',
+  ].join('\n');
+}
+
 function getErrorStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object' || !('status' in error)) {
     return undefined;
@@ -533,6 +577,96 @@ async function ensureManagedLabelsExist({
       });
     } catch (error) {
       if (getErrorStatus(error) !== 422) {
+        throw error;
+      }
+    }
+  }
+}
+
+async function ensureAuthorLabelsExist({
+  github,
+  owner,
+  repo,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+}): Promise<void> {
+  const labelDefinitions = [
+    {
+      name: AUTHOR_LABEL_MEMBER,
+      color: '0e8a16',
+      description: 'PR author classification: repository member or collaborator.',
+    },
+    {
+      name: AUTHOR_LABEL_CONTRIBUTOR,
+      color: 'fbca04',
+      description: 'PR author classification: previous contributor.',
+    },
+    {
+      name: AUTHOR_LABEL_NEW,
+      color: '0366d6',
+      description: 'PR author classification: other or first-time author.',
+    },
+  ];
+
+  for (const label of labelDefinitions) {
+    try {
+      await github.rest.issues.createLabel({
+        owner,
+        repo,
+        name: label.name,
+        color: label.color,
+        description: label.description,
+      });
+    } catch (error) {
+      if (getErrorStatus(error) !== 422) {
+        throw error;
+      }
+    }
+  }
+}
+
+async function syncAuthorLabel({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  existingLabels,
+  authorLabel,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  existingLabels: string[];
+  authorLabel: string;
+}): Promise<void> {
+  const existingSet = new Set(existingLabels);
+  const labelsToAdd = existingSet.has(authorLabel) ? [] : [authorLabel];
+  const labelsToRemove = existingLabels.filter(
+    (label) => AUTHOR_LABELS.includes(label) && label !== authorLabel,
+  );
+
+  if (labelsToAdd.length > 0) {
+    await github.rest.issues.addLabels({
+      owner,
+      repo,
+      issue_number: issueNumber,
+      labels: labelsToAdd,
+    });
+  }
+
+  for (const label of labelsToRemove) {
+    try {
+      await github.rest.issues.removeLabel({
+        owner,
+        repo,
+        issue_number: issueNumber,
+        name: label,
+      });
+    } catch (error) {
+      if (getErrorStatus(error) !== 404) {
         throw error;
       }
     }
@@ -635,6 +769,29 @@ async function upsertTriageComment({
   });
 }
 
+async function upsertProcessingComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  body,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+}): Promise<void> {
+  await upsertManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    body,
+    marker: PROCESSING_COMMENT_MARKER,
+  });
+}
+
 async function upsertDuplicateComment({
   github,
   owner,
@@ -717,6 +874,26 @@ async function deleteTriageComment({
     repo,
     issueNumber,
     marker: BOT_COMMENT_MARKER,
+  });
+}
+
+async function deleteProcessingComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}): Promise<void> {
+  await deleteManagedComment({
+    github,
+    owner,
+    repo,
+    issueNumber,
+    marker: PROCESSING_COMMENT_MARKER,
   });
 }
 
@@ -923,6 +1100,33 @@ export async function runTriageForPullRequest({
     .filter((label) => label.length > 0);
   const author = fullPullRequest.user?.login || '';
 
+  const shouldHandleOpenedMetadata = eventAction === 'opened';
+  let processingCommentPosted = false;
+
+  if (shouldHandleOpenedMetadata) {
+    const authorCategory = classifyAuthorCategory(fullPullRequest);
+    const authorLabel = getAuthorLabel(authorCategory);
+    await ensureAuthorLabelsExist({ github, owner, repo });
+    await syncAuthorLabel({
+      github,
+      owner,
+      repo,
+      issueNumber: pullNumber,
+      existingLabels: currentLabelNames,
+      authorLabel,
+    });
+    await upsertProcessingComment({
+      github,
+      owner,
+      repo,
+      issueNumber: pullNumber,
+      body: buildProcessingCommentBody(authorCategory),
+    });
+    processingCommentPosted = true;
+  }
+
+  try {
+
   if (currentLabelNames.includes(effectiveConfig.humanReviewedLabel)) {
     await syncManagedLabels({
       github,
@@ -1059,13 +1263,23 @@ export async function runTriageForPullRequest({
     });
   }
 
-  return {
-    skipped: false,
-    skipReason: null,
-    analysis,
-    desiredLabels,
-    duplicateDetection,
-  };
+    return {
+      skipped: false,
+      skipReason: null,
+      analysis,
+      desiredLabels,
+      duplicateDetection,
+    };
+  } finally {
+    if (processingCommentPosted) {
+      try {
+        await deleteProcessingComment({ github, owner, repo, issueNumber: pullNumber });
+      } catch (error) {
+        log.warning(`Failed to delete processing comment for ${owner}/${repo}#${pullNumber}.`);
+        log.error(error);
+      }
+    }
+  }
 }
 
 export async function runTriage({

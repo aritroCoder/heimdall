@@ -24,6 +24,7 @@ export interface GithubUser {
 export interface GithubPullRequest {
   id?: number;
   number: number;
+  author_association?: string | null;
   title?: string | null;
   body?: string | null;
   html_url?: string | null;
