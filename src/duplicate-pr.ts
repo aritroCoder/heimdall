@@ -658,7 +658,10 @@ async function detectDuplicatePullRequest({
   if (logger && typeof logger.info === 'function') {
     logger.info(
       `Duplicate scan for ${owner}/${repo}#${currentPullRequest.number}: ` +
-        `pool=${candidatePool.length}, compared=${compared.length}, matches=${topMatches.length}, reverts=${revertMatches.length}`,
+      `pool=${candidatePool.length}, compared=${compared.length}, matches=${topMatches.length}, reverts=${revertMatches.length}`,
+    );
+    logger.info(
+      `best match #${bestMatch ? bestMatch.number : 'N/A'} with confidence ${bestMatch ? formatPercent(bestMatch.similarity.confidence) : 'N/A'}`,
     );
 
     const nearMisses = compared
