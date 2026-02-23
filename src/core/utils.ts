@@ -1,8 +1,8 @@
-"use strict";
+'use strict';
 
-const { createHash } = require('node:crypto');
+import { createHash } from 'node:crypto';
 
-function parseCsv(value) {
+export function parseCsv(value: string | null | undefined): string[] {
   if (!value) {
     return [];
   }
@@ -13,8 +13,8 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-function parseInteger(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
+export function parseInteger(value: string | number | null | undefined, fallback: number): number {
+  const parsed = Number.parseInt(String(value), 10);
   if (Number.isNaN(parsed)) {
     return fallback;
   }
@@ -22,8 +22,8 @@ function parseInteger(value, fallback) {
   return parsed;
 }
 
-function parseNumber(value, fallback) {
-  const parsed = Number.parseFloat(value);
+export function parseNumber(value: string | number | null | undefined, fallback: number): number {
+  const parsed = Number.parseFloat(String(value));
   if (Number.isNaN(parsed)) {
     return fallback;
   }
@@ -31,7 +31,10 @@ function parseNumber(value, fallback) {
   return parsed;
 }
 
-function parseBoolean(value, fallback) {
+export function parseBoolean(
+  value: string | number | boolean | null | undefined,
+  fallback: boolean,
+): boolean {
   if (value === undefined || value === null || value === '') {
     return fallback;
   }
@@ -48,7 +51,7 @@ function parseBoolean(value, fallback) {
   return fallback;
 }
 
-function clamp(value, min, max) {
+export function clamp(value: number, min: number, max: number): number {
   if (value < min) {
     return min;
   }
@@ -60,15 +63,15 @@ function clamp(value, min, max) {
   return value;
 }
 
-function toSha256(value) {
+export function toSha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
 
-function normalizePath(filename) {
+export function normalizePath(filename: string | null | undefined): string {
   return String(filename || '').replace(/\\/g, '/').trim();
 }
 
-function getTopLevelDirectory(filename) {
+export function getTopLevelDirectory(filename: string | null | undefined): string {
   const normalized = normalizePath(filename);
   if (!normalized) {
     return '.';
@@ -82,7 +85,7 @@ function getTopLevelDirectory(filename) {
   return normalized.slice(0, slashIndex) || '.';
 }
 
-function normalizeCodeLine(value) {
+export function normalizeCodeLine(value: string | null | undefined): string {
   let line = String(value || '').trim();
   if (!line) {
     return '';
@@ -97,12 +100,16 @@ function normalizeCodeLine(value) {
   return line;
 }
 
-async function mapWithConcurrency(items, concurrency, task) {
+export async function mapWithConcurrency<TItem, TResult>(
+  items: readonly TItem[],
+  concurrency: number,
+  task: (item: TItem, index: number) => Promise<TResult>,
+): Promise<TResult[]> {
   const limit = Math.max(1, Math.min(concurrency, items.length || 1));
-  const results = new Array(items.length);
+  const results = new Array<TResult>(items.length);
   let cursor = 0;
 
-  const workers = [];
+  const workers: Promise<void>[] = [];
   for (let workerIndex = 0; workerIndex < limit; workerIndex += 1) {
     workers.push(
       (async () => {
@@ -123,37 +130,20 @@ async function mapWithConcurrency(items, concurrency, task) {
   return results;
 }
 
-
-function formatPercent(score) {
+export function formatPercent(score: number): string {
   return `${Math.round(clamp(score, 0, 1) * 100)}%`;
 }
 
-function mergeSets(target, source) {
+export function mergeSets<TValue>(target: Set<TValue>, source: Iterable<TValue>): void {
   for (const item of source) {
     target.add(item);
   }
 }
 
-function toFrequencyMap(tokens) {
-  const map = new Map();
+export function toFrequencyMap(tokens: Iterable<string>): Map<string, number> {
+  const map = new Map<string, number>();
   for (const token of tokens) {
     map.set(token, (map.get(token) || 0) + 1);
   }
   return map;
 }
-
-module.exports = {
-  clamp,
-  formatPercent,
-  getTopLevelDirectory,
-  mapWithConcurrency,
-  normalizeCodeLine,
-  normalizePath,
-  parseBoolean,
-  parseCsv,
-  parseInteger,
-  parseNumber,
-  toSha256,
-  toFrequencyMap,
-  mergeSets
-};

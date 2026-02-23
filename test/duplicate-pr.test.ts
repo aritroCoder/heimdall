@@ -1,9 +1,9 @@
 'use strict';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-const {
+import {
   DUPLICATE_COMMENT_MARKER,
   buildDuplicateCommentBody,
   buildDuplicateConfigFromEnv,
@@ -11,9 +11,16 @@ const {
   detectDuplicatePullRequest,
   evaluateCandidateSimilarity,
   normalizeDuplicateConfig,
-} = require('../src/duplicate-pr');
+} from '../src/duplicate-pr';
+import type {
+  GithubClient,
+  GithubIssueComment,
+  GithubPullRequest,
+  GithubPullRequestCommit,
+  GithubPullRequestFile,
+} from '../src/types';
 
-function createPullRequest(number, overrides = {}) {
+function createPullRequest(number: number, overrides: Partial<GithubPullRequest> = {}): GithubPullRequest {
   return {
     id: number * 10,
     number,
@@ -30,13 +37,23 @@ function createPullRequest(number, overrides = {}) {
   };
 }
 
-function createMockGithub({ pullsByState, filesByPull }) {
-  const listFilesRoute = () => {};
+function createMockGithub({
+  pullsByState,
+  filesByPull,
+}: {
+  pullsByState: Record<string, GithubPullRequest[]>;
+  filesByPull: Record<number, GithubPullRequestFile[]>;
+}): GithubClient {
+  const listFilesRoute = async (): Promise<{ data: GithubPullRequestFile[] }> => ({ data: [] });
+  const notImplemented = async (): Promise<never> => {
+    throw new Error('Unexpected route in duplicate-pr tests.');
+  };
 
   return {
     rest: {
       pulls: {
-        list: async ({ state, page }) => {
+        get: notImplemented,
+        list: async ({ state, page = 1 }) => {
           if (page > 1) {
             return { data: [] };
           }
@@ -44,14 +61,24 @@ function createMockGithub({ pullsByState, filesByPull }) {
           return { data: pullsByState[state] || [] };
         },
         listFiles: listFilesRoute,
+        listCommits: async (): Promise<{ data: GithubPullRequestCommit[] }> => ({ data: [] }),
+      },
+      issues: {
+        createLabel: notImplemented,
+        addLabels: notImplemented,
+        removeLabel: notImplemented,
+        listComments: async (): Promise<{ data: GithubIssueComment[] }> => ({ data: [] }),
+        updateComment: notImplemented,
+        createComment: notImplemented,
+        deleteComment: notImplemented,
       },
     },
-    paginate: async (route, params) => {
-      if (route === listFilesRoute) {
-        return filesByPull[params.pull_number] || [];
-      }
-
-      throw new Error('Unexpected pagination route in duplicate-pr tests.');
+    paginate: async <TParams extends Record<string, unknown>, TItem>(
+      _route: (params: TParams) => Promise<{ data: TItem[] }>,
+      params: TParams,
+    ): Promise<TItem[]> => {
+      const pullNumber = Number((params as { pull_number?: unknown }).pull_number);
+      return ((Number.isNaN(pullNumber) ? [] : filesByPull[pullNumber] || []) as unknown) as TItem[];
     },
   };
 }
@@ -234,6 +261,7 @@ test('detectDuplicatePullRequest finds duplicate among filtered candidates', asy
 
   assert.equal(result.checked, true);
   assert.equal(result.flagged, true);
+  assert.ok(result.bestMatch);
   assert.equal(result.bestMatch.number, 101);
   assert.ok(result.bestMatch.similarity.metrics.fileOverlap >= 0.7);
 });
@@ -242,23 +270,69 @@ test('buildDuplicateCommentBody renders marker and top-match breakdown', () => {
   const body = buildDuplicateCommentBody({
     currentPullRequest: createPullRequest(200, { title: 'feat: add endpoint' }),
     detectionResult: {
+      checked: true,
+      skipReason: null,
       flagged: true,
+      candidateCount: 1,
+      comparedCount: 1,
       matches: [
         {
           number: 42,
+          htmlUrl: 'https://github.com/acme/repo/pull/42',
           state: 'open',
           title: 'feat: add endpoint',
+          mergedAt: null,
           similarity: {
             confidence: 0.97,
             reason: 'patch-id-match',
+            isDuplicate: true,
+            isRevert: false,
+            passesCandidateFilter: true,
             metrics: {
               fileOverlap: 1,
+              topLevelDirOverlap: 1,
+              fileCountDelta: 0,
               structuralSimilarity: 1,
               metadataSimilarity: 0.95,
+              functionOverlap: 1,
+              classOverlap: 0,
+              importOverlap: 1,
+              patchIdMatch: true,
+              inversePatchMatch: false,
+              normalizedDiffHashMatch: true,
+              filePathHashMatch: true,
             },
           },
         },
       ],
+      bestMatch: {
+        number: 42,
+        htmlUrl: 'https://github.com/acme/repo/pull/42',
+        state: 'open',
+        title: 'feat: add endpoint',
+        mergedAt: null,
+        similarity: {
+          confidence: 0.97,
+          reason: 'patch-id-match',
+          isDuplicate: true,
+          isRevert: false,
+          passesCandidateFilter: true,
+          metrics: {
+            fileOverlap: 1,
+            topLevelDirOverlap: 1,
+            fileCountDelta: 0,
+            structuralSimilarity: 1,
+            metadataSimilarity: 0.95,
+            functionOverlap: 1,
+            classOverlap: 0,
+            importOverlap: 1,
+            patchIdMatch: true,
+            inversePatchMatch: false,
+            normalizedDiffHashMatch: true,
+            filePathHashMatch: true,
+          },
+        },
+      },
       reverts: [],
       thresholds: {
         fileOverlap: 0.7,

@@ -1,19 +1,20 @@
 'use strict';
 
-const test = require('node:test');
-const assert = require('node:assert/strict');
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-const {
+import {
   analyzePullRequest,
   buildConfigFromEnv,
   determineSizeLabel,
   getDesiredLabels,
   DEFAULT_CONFIG,
-} = require('../src/triage');
+} from '../src/triage';
 
 test('scores docs-only pull requests without bypassing', () => {
   const analysis = analyzePullRequest({
     pr: {
+      number: 1,
       title: 'docs: improve setup guide',
       body: 'Updated setup instructions for better clarity.',
       additions: 40,
@@ -38,6 +39,7 @@ test('flags both low-effort and AI-slop when multiple strong signals exist', () 
 
   const analysis = analyzePullRequest({
     pr: {
+      number: 2,
       title: 'update changes',
       body: 'quick update',
       additions: 1400,
@@ -67,6 +69,7 @@ test('flags both low-effort and AI-slop when multiple strong signals exist', () 
 test('does not flag high-context pull requests with tests', () => {
   const analysis = analyzePullRequest({
     pr: {
+      number: 3,
       title: 'feat(parser): support escaped commas in CSV input',
       body: [
         '## Summary',
@@ -149,6 +152,7 @@ test('determineSizeLabel returns XS for zero lines', () => {
 test('analyzePullRequest includes sizeLabel in result', () => {
   const analysis = analyzePullRequest({
     pr: {
+      number: 4,
       title: 'feat: add new feature',
       body: 'A detailed description of the changes being made here.',
       additions: 80,

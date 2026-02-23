@@ -1,8 +1,8 @@
-"use strict";
+'use strict';
 
-const { normalizeCodeLine } = require('./utils');
+import { normalizeCodeLine } from './utils';
 
-const STOP_WORDS = new Set([
+const STOP_WORDS: ReadonlySet<string> = new Set([
   'a',
   'an',
   'and',
@@ -25,7 +25,7 @@ const STOP_WORDS = new Set([
   'with',
 ]);
 
-function tokenizeLine(value) {
+export function tokenizeLine(value: string | null | undefined): string[] {
   const normalized = normalizeCodeLine(value);
   if (!normalized) {
     return [];
@@ -37,7 +37,7 @@ function tokenizeLine(value) {
     .filter((token) => token.length > 1 && !STOP_WORDS.has(token));
 }
 
-function matchFirstGroup(value, patterns) {
+export function matchFirstGroup(value: string, patterns: readonly RegExp[]): string | null {
   for (const pattern of patterns) {
     const match = value.match(pattern);
     if (match && match[1]) {
@@ -47,8 +47,3 @@ function matchFirstGroup(value, patterns) {
 
   return null;
 }
-
-module.exports = {
-  matchFirstGroup,
-  tokenizeLine,
-};

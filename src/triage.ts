@@ -1,15 +1,37 @@
 'use strict';
 
-const {
+import {
   DUPLICATE_COMMENT_MARKER,
   buildDuplicateCommentBody,
   detectDuplicatePullRequest,
   normalizeDuplicateConfig,
-} = require('./duplicate-pr');
+} from './duplicate-pr';
+import type {
+  CoreLike,
+  DuplicateConfig,
+  DuplicateConfigInput,
+  DuplicateDetectionResult,
+  EnvMap,
+  GithubClient,
+  GithubIssueComment,
+  GithubPullRequest,
+  GithubPullRequestCommit,
+  GithubPullRequestFile,
+  LoggerLike,
+  NormalizedLogger,
+  PullRequestContextLike,
+  TriageAnalysis,
+  TriageCategoryName,
+  TriageCategoryResult,
+  TriageConfig,
+  TriageConfigInput,
+  TriageFinding,
+  TriageRunResult,
+} from './types';
 
-const BOT_COMMENT_MARKER = '<!-- heimdall-bot -->';
+export const BOT_COMMENT_MARKER = '<!-- heimdall-bot -->';
 
-const DEFAULT_CONFIG = Object.freeze({
+export const DEFAULT_CONFIG: Readonly<TriageConfig> = Object.freeze({
   aiSlopThreshold: 45,
   lowEffortThreshold: 40,
   aiSlopLabel: 'triage:ai-slop',
@@ -22,7 +44,7 @@ const DEFAULT_CONFIG = Object.freeze({
   sizeThresholds: [10, 100, 500, 1000],
 });
 
-const SIZE_LABEL_COLORS = ['3cbf00', '5d9801', 'fbca04', 'ff9500', 'e11d48'];
+export const SIZE_LABEL_COLORS: readonly string[] = ['3cbf00', '5d9801', 'fbca04', 'ff9500', 'e11d48'];
 
 const GENERIC_TITLE_RE = /^(update[ds]?|fix(e[ds])?|changes?|misc|improvements?|refactor(ed)?|cleanup|wip|add(ed)?|remove[ds]?|delete[ds]?|modify|modifie[ds]|tweak(ed)?|adjust(ed)?|bump(ed)?)\b/i;
 const GENERIC_COMMIT_RE = /^(fix|update|changes?|misc|refactor|cleanup|wip|address review comments|apply suggestions?)($|[:\s])/i;
@@ -70,7 +92,7 @@ const SOURCE_EXTENSIONS = new Set([
   'hpp',
 ]);
 
-function parseCsv(value) {
+export function parseCsv(value: string | null | undefined): string[] {
   if (!value) {
     return [];
   }
@@ -81,8 +103,8 @@ function parseCsv(value) {
     .filter(Boolean);
 }
 
-function parseInteger(value, fallback) {
-  const parsed = Number.parseInt(value, 10);
+function parseInteger(value: string | number | null | undefined, fallback: number): number {
+  const parsed = Number.parseInt(String(value), 10);
   if (Number.isNaN(parsed)) {
     return fallback;
   }
@@ -90,7 +112,7 @@ function parseInteger(value, fallback) {
   return parsed;
 }
 
-function normalizeConfig(inputConfig) {
+function normalizeConfig(inputConfig: TriageConfigInput | null | undefined): TriageConfig {
   const config = { ...DEFAULT_CONFIG, ...inputConfig };
 
   return {
@@ -107,8 +129,8 @@ function normalizeConfig(inputConfig) {
   };
 }
 
-function buildConfigFromEnv(env) {
-  const overrides = {};
+export function buildConfigFromEnv(env: EnvMap): TriageConfig {
+  const overrides: TriageConfigInput = {};
 
   if (env.TRIAGE_AI_SLOP_THRESHOLD) overrides['aiSlopThreshold'] = env.TRIAGE_AI_SLOP_THRESHOLD;
   if (env.TRIAGE_LOW_EFFORT_THRESHOLD) overrides['lowEffortThreshold'] = env.TRIAGE_LOW_EFFORT_THRESHOLD;
@@ -126,7 +148,7 @@ function buildConfigFromEnv(env) {
   return normalizeConfig(overrides);
 }
 
-function getLowerExtension(filename) {
+function getLowerExtension(filename: string): string {
   const segments = filename.toLowerCase().split('.');
   if (segments.length < 2) {
     return '';
@@ -135,11 +157,11 @@ function getLowerExtension(filename) {
   return segments[segments.length - 1];
 }
 
-function isTestFile(filename) {
+export function isTestFile(filename: string): boolean {
   return TEST_FILE_RE.test(filename);
 }
 
-function isDocsOrConfigFile(filename) {
+export function isDocsOrConfigFile(filename: string): boolean {
   const normalized = filename.toLowerCase();
   if (normalized.startsWith('docs/') || normalized.startsWith('.github/')) {
     return true;
@@ -153,7 +175,7 @@ function isDocsOrConfigFile(filename) {
   return DOCS_OR_CONFIG_EXTENSIONS.has(extension);
 }
 
-function isSourceFile(filename) {
+export function isSourceFile(filename: string): boolean {
   if (isTestFile(filename)) {
     return true;
   }
@@ -162,11 +184,20 @@ function isSourceFile(filename) {
   return SOURCE_EXTENSIONS.has(extension);
 }
 
-function buildFinding(id, category, points, detail) {
+function buildFinding(
+  id: string,
+  category: TriageCategoryName,
+  points: number,
+  detail: string,
+): TriageFinding {
   return { id, category, points, detail };
 }
 
-function scoreCategory(findings, threshold, minFindings) {
+function scoreCategory(
+  findings: TriageFinding[],
+  threshold: number,
+  minFindings: number,
+): TriageCategoryResult {
   const score = Math.min(
     100,
     findings.reduce((total, finding) => total + finding.points, 0),
@@ -180,7 +211,10 @@ function scoreCategory(findings, threshold, minFindings) {
   };
 }
 
-function determineSizeLabel(totalLinesChanged, config) {
+export function determineSizeLabel(
+  totalLinesChanged: number,
+  config: Pick<TriageConfig, 'sizeThresholds' | 'sizeLabels'>,
+): string {
   const thresholds = config.sizeThresholds;
   const labels = config.sizeLabels;
 
@@ -193,11 +227,21 @@ function determineSizeLabel(totalLinesChanged, config) {
   return labels[labels.length - 1];
 }
 
-function normalizeCommitMessage(message) {
+function normalizeCommitMessage(message: string): string {
   return message.toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function analyzePullRequest({ pr, files, commits, config }) {
+export function analyzePullRequest({
+  pr,
+  files,
+  commits,
+  config,
+}: {
+  pr: GithubPullRequest;
+  files: GithubPullRequestFile[];
+  commits: GithubPullRequestCommit[];
+  config: TriageConfigInput | TriageConfig | null | undefined;
+}): TriageAnalysis {
   const effectiveConfig = normalizeConfig(config);
 
   const title = (pr.title || '').trim();
@@ -223,8 +267,8 @@ function analyzePullRequest({ pr, files, commits, config }) {
   const uniqueCommitRatio = commitHeadlines.length > 0 ? uniqueCommitCount / commitHeadlines.length : 1;
   const churnPerFile = fileCount > 0 ? totalLinesChanged / fileCount : 0;
 
-  const lowEffortFindings = [];
-  const aiSlopFindings = [];
+  const lowEffortFindings: TriageFinding[] = [];
+  const aiSlopFindings: TriageFinding[] = [];
 
   if (bodyLength < 40) {
     lowEffortFindings.push(
@@ -355,8 +399,15 @@ function analyzePullRequest({ pr, files, commits, config }) {
   };
 }
 
-function getDesiredLabels(analysis, config) {
-  const labels = [];
+export function getDesiredLabels(
+  analysis: {
+    sizeLabel: string;
+    lowEffort: Pick<TriageCategoryResult, 'flagged'>;
+    aiSlop: Pick<TriageCategoryResult, 'flagged'>;
+  },
+  config: Pick<TriageConfig, 'lowEffortLabel' | 'aiSlopLabel'>,
+): string[] {
+  const labels: string[] = [];
 
   if (analysis.sizeLabel) {
     labels.push(analysis.sizeLabel);
@@ -373,7 +424,7 @@ function getDesiredLabels(analysis, config) {
   return labels;
 }
 
-function renderCategory(name, categoryResult) {
+function renderCategory(name: string, categoryResult: TriageCategoryResult): string {
   const lines = [`### ${name}`, '', `- Score: **${categoryResult.score}/100** (threshold: ${categoryResult.threshold})`];
 
   if (categoryResult.findings.length === 0) {
@@ -388,7 +439,10 @@ function renderCategory(name, categoryResult) {
   return lines.join('\n');
 }
 
-function buildCommentBody(analysis, config) {
+export function buildCommentBody(
+  analysis: TriageAnalysis,
+  config: Pick<TriageConfig, 'humanReviewedLabel'>,
+): string {
   const sections = [
     BOT_COMMENT_MARKER,
     '## PR Triage Result',
@@ -405,11 +459,14 @@ function buildCommentBody(analysis, config) {
   return sections.join('\n');
 }
 
-function isTrustedAuthor(author, config) {
+function isTrustedAuthor(author: string, config: Pick<TriageConfig, 'trustedAuthors'>): boolean {
   return config.trustedAuthors.map((item) => item.toLowerCase()).includes((author || '').toLowerCase());
 }
 
-function matchesTrustedTitlePattern(title, config) {
+function matchesTrustedTitlePattern(
+  title: string,
+  config: Pick<TriageConfig, 'trustedTitlePatterns'>,
+): boolean {
   for (const pattern of config.trustedTitlePatterns) {
     try {
       const regex = new RegExp(pattern, 'i');
@@ -424,7 +481,26 @@ function matchesTrustedTitlePattern(title, config) {
   return false;
 }
 
-async function ensureManagedLabelsExist({ github, owner, repo, config }) {
+function getErrorStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object' || !('status' in error)) {
+    return undefined;
+  }
+
+  const status = (error as { status?: unknown }).status;
+  return typeof status === 'number' ? status : undefined;
+}
+
+async function ensureManagedLabelsExist({
+  github,
+  owner,
+  repo,
+  config,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  config: TriageConfig;
+}): Promise<void> {
   const labelDefinitions = [
     {
       name: config.lowEffortLabel,
@@ -456,7 +532,7 @@ async function ensureManagedLabelsExist({ github, owner, repo, config }) {
         description: label.description,
       });
     } catch (error) {
-      if (!error || error.status !== 422) {
+      if (getErrorStatus(error) !== 422) {
         throw error;
       }
     }
@@ -471,7 +547,15 @@ async function syncManagedLabels({
   existingLabels,
   desiredLabels,
   config,
-}) {
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  existingLabels: string[];
+  desiredLabels: string[];
+  config: TriageConfig;
+}): Promise<void> {
   const managedLabelSet = new Set([config.lowEffortLabel, config.aiSlopLabel, ...config.sizeLabels]);
   const existingSet = new Set(existingLabels);
 
@@ -498,14 +582,26 @@ async function syncManagedLabels({
         name: label,
       });
     } catch (error) {
-      if (!error || error.status !== 404) {
+      if (getErrorStatus(error) !== 404) {
         throw error;
       }
     }
   }
 }
 
-async function findExistingManagedComment({ github, owner, repo, issueNumber, marker }) {
+async function findExistingManagedComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  marker,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  marker: string;
+}): Promise<GithubIssueComment | undefined> {
   const comments = await github.paginate(github.rest.issues.listComments, {
     owner,
     repo,
@@ -516,7 +612,19 @@ async function findExistingManagedComment({ github, owner, repo, issueNumber, ma
   return comments.find((comment) => typeof comment.body === 'string' && comment.body.includes(marker));
 }
 
-async function upsertTriageComment({ github, owner, repo, issueNumber, body }) {
+async function upsertTriageComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  body,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+}): Promise<void> {
   await upsertManagedComment({
     github,
     owner,
@@ -527,7 +635,19 @@ async function upsertTriageComment({ github, owner, repo, issueNumber, body }) {
   });
 }
 
-async function upsertDuplicateComment({ github, owner, repo, issueNumber, body }) {
+async function upsertDuplicateComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  body,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+}): Promise<void> {
   await upsertManagedComment({
     github,
     owner,
@@ -538,7 +658,21 @@ async function upsertDuplicateComment({ github, owner, repo, issueNumber, body }
   });
 }
 
-async function upsertManagedComment({ github, owner, repo, issueNumber, body, marker }) {
+async function upsertManagedComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  body,
+  marker,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  body: string;
+  marker: string;
+}): Promise<void> {
   // if already comment posted for duplicate PR, update instead of creating new comment
   const existingComment = await findExistingManagedComment({
     github,
@@ -566,7 +700,17 @@ async function upsertManagedComment({ github, owner, repo, issueNumber, body, ma
   });
 }
 
-async function deleteTriageComment({ github, owner, repo, issueNumber }) {
+async function deleteTriageComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}): Promise<void> {
   await deleteManagedComment({
     github,
     owner,
@@ -576,7 +720,17 @@ async function deleteTriageComment({ github, owner, repo, issueNumber }) {
   });
 }
 
-async function deleteDuplicateComment({ github, owner, repo, issueNumber }) {
+async function deleteDuplicateComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+}): Promise<void> {
   await deleteManagedComment({
     github,
     owner,
@@ -586,7 +740,19 @@ async function deleteDuplicateComment({ github, owner, repo, issueNumber }) {
   });
 }
 
-async function deleteManagedComment({ github, owner, repo, issueNumber, marker }) {
+async function deleteManagedComment({
+  github,
+  owner,
+  repo,
+  issueNumber,
+  marker,
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  issueNumber: number;
+  marker: string;
+}): Promise<void> {
   const existingComment = await findExistingManagedComment({
     github,
     owner,
@@ -606,7 +772,7 @@ async function deleteManagedComment({ github, owner, repo, issueNumber, marker }
   });
 }
 
-function buildSkippedDuplicateDetection(skipReason) {
+function buildSkippedDuplicateDetection(skipReason: string): DuplicateDetectionResult {
   return {
     checked: false,
     skipReason,
@@ -630,7 +796,17 @@ async function runDuplicateCheckForPullRequest({
   duplicateConfig,
   eventAction,
   logger,
-}) {
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  pullNumber: number;
+  fullPullRequest: GithubPullRequest;
+  files: GithubPullRequestFile[];
+  duplicateConfig: DuplicateConfigInput | DuplicateConfig | null;
+  eventAction?: string;
+  logger?: LoggerLike | null;
+}): Promise<DuplicateDetectionResult> {
   const log = toLogger(logger);
   const effectiveDuplicateConfig = normalizeDuplicateConfig(duplicateConfig);
 
@@ -681,7 +857,7 @@ async function runDuplicateCheckForPullRequest({
   return duplicateResult;
 }
 
-function toLogger(logger) {
+function toLogger(logger: LoggerLike | null | undefined): NormalizedLogger {
   if (!logger) {
     return {
       info: () => {},
@@ -706,7 +882,7 @@ function toLogger(logger) {
   };
 }
 
-async function runTriageForPullRequest({
+export async function runTriageForPullRequest({
   github,
   owner,
   repo,
@@ -715,7 +891,16 @@ async function runTriageForPullRequest({
   duplicateConfig = null,
   eventAction,
   logger,
-}) {
+}: {
+  github: GithubClient;
+  owner: string;
+  repo: string;
+  pullNumber: number;
+  config: TriageConfigInput | TriageConfig | null | undefined;
+  duplicateConfig?: DuplicateConfigInput | DuplicateConfig | null;
+  eventAction?: string;
+  logger?: LoggerLike | null;
+}): Promise<TriageRunResult> {
   const log = toLogger(logger);
   const effectiveConfig = normalizeConfig(config);
 
@@ -733,8 +918,10 @@ async function runTriageForPullRequest({
     pull_number: pullNumber,
   });
 
-  const currentLabelNames = (fullPullRequest.labels || []).map((label) => label.name);
-  const author = fullPullRequest.user ? fullPullRequest.user.login : '';
+  const currentLabelNames = (fullPullRequest.labels || [])
+    .map((label) => label.name || '')
+    .filter((label) => label.length > 0);
+  const author = fullPullRequest.user?.login || '';
 
   if (currentLabelNames.includes(effectiveConfig.humanReviewedLabel)) {
     await syncManagedLabels({
@@ -809,7 +996,7 @@ async function runTriageForPullRequest({
     per_page: 100,
   });
 
-  let duplicateDetection: any = buildSkippedDuplicateDetection('not-run');
+  let duplicateDetection: DuplicateDetectionResult = buildSkippedDuplicateDetection('not-run');
   try {
     duplicateDetection = await runDuplicateCheckForPullRequest({
       github,
@@ -881,7 +1068,17 @@ async function runTriageForPullRequest({
   };
 }
 
-async function runTriage({ github, context, core, config }) {
+export async function runTriage({
+  github,
+  context,
+  core,
+  config,
+}: {
+  github: GithubClient;
+  context: PullRequestContextLike;
+  core: CoreLike;
+  config: TriageConfigInput | TriageConfig | null | undefined;
+}): Promise<void> {
   const pullRequest = context.payload.pull_request;
 
   if (!pullRequest) {
@@ -914,20 +1111,3 @@ async function runTriage({ github, context, core, config }) {
   core.setOutput('low_effort_score', String(result.analysis.lowEffort.score));
   core.setOutput('labels_applied', result.desiredLabels.join(','));
 }
-
-module.exports = {
-  BOT_COMMENT_MARKER,
-  DEFAULT_CONFIG,
-  SIZE_LABEL_COLORS,
-  analyzePullRequest,
-  buildCommentBody,
-  buildConfigFromEnv,
-  determineSizeLabel,
-  getDesiredLabels,
-  isDocsOrConfigFile,
-  isSourceFile,
-  isTestFile,
-  parseCsv,
-  runTriage,
-  runTriageForPullRequest,
-};
