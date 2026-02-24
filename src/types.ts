@@ -171,6 +171,9 @@ export interface PullRequestEventPayload {
     installation?: {
         id?: number | null;
     } | null;
+    label?: {
+        name: string;
+    } | null;
 }
 
 export interface TriageConfig {

@@ -42,8 +42,7 @@ export const SUPPORTED_PULL_REQUEST_ACTIONS = new Set([
     'edited',
     'ready_for_review',
     'labeled',
-    'unlabeled',
-]);
+    ]);
 
 export function normalizePrivateKey(
     privateKey: string | null | undefined
@@ -264,6 +263,18 @@ export async function createGithubApp({
             if (!SUPPORTED_PULL_REQUEST_ACTIONS.has(payload.action)) {
                 return;
             }
+
+            // For 'labeled' action, only process if it's the human-reviewed bypass label
+            if (payload.action === 'labeled') {
+                const addedLabel = payload.label?.name;
+                if (addedLabel !== triageConfig.humanReviewedLabel) {
+                    logger.info(
+                        `Ignoring 'labeled' event for label '${addedLabel}' (not the bypass label '${triageConfig.humanReviewedLabel}').`
+                    );
+                    return;
+                }
+            }
+
             logger.info(
                 `Received pull_request number ${payload.pull_request?.number} action ${payload.action} event for ${payload.repository.name}.`
             );
