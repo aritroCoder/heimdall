@@ -4,33 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚔️</text></svg>">
-    <title>Heimdall | The All-Seeing PR Guardian</title>
+    <title>Heimdall | Feature Overview</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
     <style>
         :root {
-            /* Norse Earth & Stone - Light Marble Palette */
             --bg-marble: #f9f7f2;
             --stone-surface: #f0eadd;
             --stone-darker: #e6dfd5;
-            
-            /* Text Colors - High Contrast Dark */
             --text-main: #2a2520;
             --text-muted: #5c554f;
             --text-gold: #8a7020;
-            
-            /* Greek Gold & Marble */
             --gold: #D4AF37;
             --gold-dim: #b59020;
             --gold-light: #F4D03F;
-            
-            /* Bifrost Frost/Magic - Adjusted for Light Background */
             --frost: #2c8c8c;
             --frost-bright: #4dbdbd;
-            --frost-shadow: 0 0 20px rgba(44, 140, 140, 0.2);
-            
-            /* Shadows */
             --shadow-warm: 0 20px 40px rgba(42, 37, 32, 0.08);
             --shadow-sharp: 0 5px 15px rgba(42, 37, 32, 0.05);
         }
@@ -53,13 +43,10 @@
             justify-content: flex-start;
             padding: 4rem 0;
             overflow-x: hidden;
-            
-            /* Subtle noise for stone grain — no gradients */
-            background-image: 
+            background-image:
                 url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.6' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.08'/%3E%3C/svg%3E");
         }
 
-        /* The Monolith Container - Now a carved stone slab */
         .monolith {
             max-width: 1100px;
             width: 90%;
@@ -70,19 +57,16 @@
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             border: 1px solid rgba(212, 175, 55, 0.2);
-            box-shadow: 
+            box-shadow:
                 0 0 0 1px rgba(255, 255, 255, 0.6) inset,
                 var(--shadow-warm);
-            
-            /* Angular clip-path for Norse feel */
             clip-path: polygon(
-                20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 
+                20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%,
                 0 100%, 0 20px
             );
             animation: riseUp 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
         }
 
-        /* Decorative Corners - Norse/Greek Fusion */
         .corner-decor {
             position: absolute;
             width: 40px;
@@ -91,6 +75,7 @@
             opacity: 0.7;
             transition: all 0.5s ease;
         }
+
         .tl { top: 15px; left: 15px; border-right: none; border-bottom: none; transform: skew(-10deg); }
         .tr { top: 15px; right: 15px; border-left: none; border-bottom: none; transform: skew(10deg); }
         .bl { bottom: 15px; left: 15px; border-right: none; border-top: none; transform: skew(10deg); }
@@ -101,62 +86,62 @@
             height: 50px;
         }
 
-        /* Main Eye / Compass Graphic */
         .guardian-eye {
             width: 90px;
             height: 90px;
             margin: 0 auto 2.5rem;
-            opacity: 1;
             animation: pulse 4s infinite ease-in-out;
             display: block;
             filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
         }
-        .guardian-eye path, .guardian-eye circle {
+
+        .guardian-eye path,
+        .guardian-eye circle {
             fill: none;
             stroke: var(--gold);
             stroke-width: 1.5;
             vector-effect: non-scaling-stroke;
         }
+
         .guardian-eye .pupil {
             fill: var(--gold);
             stroke: none;
         }
+
         .guardian-eye .iris {
             fill: rgba(212,175,55,0.15);
         }
-        /* Rune circle opacity increased for visibility on light bg */
+
         .guardian-eye .runes {
             stroke: var(--text-main);
             stroke-opacity: 0.3;
         }
 
-        /* Typography */
         h1 {
             font-family: 'Cinzel', serif;
-            font-size: clamp(3.5rem, 10vw, 6rem);
+            font-size: clamp(3rem, 9vw, 5rem);
             font-weight: 700;
             letter-spacing: 0.12em;
             color: var(--gold);
             margin-bottom: 0.5rem;
             text-transform: uppercase;
             filter: drop-shadow(0 1px 1px rgba(255,255,255,0.8));
-            position: relative;
             display: inline-block;
         }
 
-        /* Bifrost Divider */
         .bifrost-line {
             height: 3px;
             width: 60%;
             max-width: 400px;
-            margin: 2rem auto 3.5rem;
+            margin: 2rem auto 3rem;
             background: var(--gold);
             position: relative;
             opacity: 0.6;
-            box-shadow: none;
             border-radius: 2px;
         }
-        .bifrost-line::before, .bifrost-line::after {
+
+        .bifrost-line::before,
+        .bifrost-line::after {
             content: '';
             position: absolute;
             top: 50%;
@@ -167,52 +152,44 @@
             border: 2px solid var(--gold);
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
+
         .bifrost-line::before { left: -6px; }
         .bifrost-line::after { right: -6px; }
 
-        .subtitle {
-            font-family: 'Cinzel', serif;
-            font-size: 1.2rem;
-            letter-spacing: 0.5em;
-            text-transform: uppercase;
-            color: var(--frost);
-            margin-bottom: 2rem;
-            font-weight: 600;
-        }
-
         .description {
-            font-size: 1.4rem;
-            max-width: 680px;
-            margin: 0 auto 5rem;
+            font-size: 1.35rem;
+            max-width: 780px;
+            margin: 0 auto 4rem;
             color: var(--text-muted);
             font-weight: 400;
         }
 
-        /* Feature Grid */
         .features {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 2.5rem;
-            margin-bottom: 5rem;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
             padding: 0 1rem;
         }
 
         .feature {
             position: relative;
-            padding: 2.5rem 1.5rem;
+            padding: 2.2rem 1.4rem;
             background: #ffffff;
             border: 1px solid rgba(212, 175, 55, 0.15);
-            box-shadow: 
+            box-shadow:
                 0 4px 6px rgba(0,0,0,0.02),
                 0 10px 15px rgba(0,0,0,0.03);
             transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-            /* Subtle inset border for "engraved" feel */
         }
-        
+
         .feature::before {
             content: '';
             position: absolute;
-            top: 0; left: 20%; right: 20%; height: 2px;
+            top: 0;
+            left: 20%;
+            right: 20%;
+            height: 2px;
             background: var(--gold);
             opacity: 0.4;
         }
@@ -220,20 +197,20 @@
         .feature:hover {
             transform: translateY(-8px);
             border-color: rgba(212, 175, 55, 0.4);
-            box-shadow: 
+            box-shadow:
                 0 15px 30px rgba(42, 37, 32, 0.08),
                 0 0 0 1px rgba(212, 175, 55, 0.1);
         }
 
         .rune-icon {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.2rem;
             display: flex;
             justify-content: center;
         }
-        
+
         .rune-svg {
-            width: 54px;
-            height: 54px;
+            width: 50px;
+            height: 50px;
             stroke: var(--gold);
             stroke-width: 1.8;
             fill: none;
@@ -242,9 +219,9 @@
 
         .feature h3 {
             font-family: 'Cinzel', serif;
-            font-size: 1.25rem;
-            letter-spacing: 0.1em;
-            margin-bottom: 1rem;
+            font-size: 1.1rem;
+            letter-spacing: 0.08em;
+            margin-bottom: 0.75rem;
             color: var(--text-main);
             text-transform: uppercase;
             font-weight: 700;
@@ -253,16 +230,15 @@
         .feature p {
             font-size: 1.05rem;
             color: var(--text-muted);
-            font-style: italic;
-            line-height: 1.5;
+            line-height: 1.45;
         }
 
-        /* CTA Button */
-        .cta-container {
-            position: relative;
-            display: inline-block;
-            margin-bottom: 4rem;
-            z-index: 10;
+        .action-row {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 3rem;
         }
 
         .cta-button {
@@ -270,17 +246,16 @@
             align-items: center;
             justify-content: center;
             font-family: 'Cinzel', serif;
-            font-size: 1.15rem;
-            letter-spacing: 0.15em;
+            font-size: 1rem;
+            letter-spacing: 0.12em;
             text-decoration: none;
             color: #fff;
             background: var(--gold);
-            padding: 1.4rem 4rem;
-            position: relative;
-            transition: all 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            padding: 1rem 2.2rem;
+            transition: all 0.35s cubic-bezier(0.25, 1, 0.5, 1);
             text-transform: uppercase;
             font-weight: 700;
-            clip-path: polygon(15px 0, 100% 0, 100% calc(100% - 15px), calc(100% - 15px) 100%, 0 100%, 0 15px);
+            clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
             box-shadow: 0 10px 20px rgba(212, 175, 55, 0.3);
             text-shadow: 0 1px 2px rgba(0,0,0,0.2);
         }
@@ -291,23 +266,30 @@
             background: var(--gold-light);
             color: #fff;
         }
-        
-        .cta-button:active {
-            transform: translateY(1px);
+
+        .cta-button.secondary {
+            background: #ffffff;
+            color: var(--text-main);
+            border: 1px solid rgba(212, 175, 55, 0.5);
+            text-shadow: none;
+            box-shadow: 0 8px 16px rgba(42, 37, 32, 0.08);
         }
 
-        /* Greek Meander Border (SVG pattern) */
+        .cta-button.secondary:hover {
+            background: var(--stone-surface);
+            box-shadow: 0 12px 22px rgba(42, 37, 32, 0.12);
+        }
+
         .border-pattern {
             height: 24px;
             width: 100%;
-            /* Darker gold/bronze for visibility on light marble */
             background-image: url("data:image/svg+xml,%3Csvg width='40' height='20' viewBox='0 0 40 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0,15 L5,15 L5,5 L15,5 L15,15 L10,15 L10,10 L20,10 L20,15 L25,15 L25,5 L35,5 L35,15 L30,15 L30,10 L40,10 L40,0 L0,0 Z' fill='%23b59020' fill-opacity='0.4'/%3E%3C/svg%3E");
-            margin: 2rem 0;
+            margin: 1.5rem 0;
             opacity: 0.8;
         }
 
         footer {
-            margin-top: 3rem;
+            margin-top: 2rem;
             font-size: 0.9rem;
             color: var(--text-muted);
             text-transform: uppercase;
@@ -322,7 +304,7 @@
             transition: color 0.3s;
             padding-bottom: 2px;
         }
-        
+
         footer a::after {
             content: '';
             position: absolute;
@@ -337,12 +319,11 @@
         footer a:hover {
             color: var(--gold);
         }
-        
+
         footer a:hover::after {
             width: 100%;
         }
 
-        /* Animations */
         @keyframes riseUp {
             from { transform: translateY(60px); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -353,34 +334,32 @@
             50% { transform: scale(1.05); filter: drop-shadow(0 8px 12px rgba(212, 175, 55, 0.25)); }
         }
 
-        /* Mobile Adjustments */
         @media (max-width: 600px) {
             .monolith {
-                padding: 3rem 1.5rem;
+                padding: 3rem 1.4rem;
                 width: 94%;
-                /* Less blur for performance/clarity on mobile */
             }
+
             h1 {
-                font-size: 3rem;
-                margin-top: 1rem;
+                font-size: 2.4rem;
+                margin-top: 0.5rem;
             }
-            .subtitle {
-                font-size: 0.9rem;
-                letter-spacing: 0.3em;
-            }
+
             .description {
                 font-size: 1.1rem;
-                margin-bottom: 3rem;
+                margin-bottom: 2.5rem;
             }
+
             .features {
                 grid-template-columns: 1fr;
-                gap: 1.5rem;
+                gap: 1.3rem;
             }
+
             .cta-button {
-                padding: 1.2rem 3rem;
-                font-size: 1rem;
                 width: 100%;
+                padding: 1rem 1.4rem;
             }
+
             .bifrost-line {
                 width: 80%;
             }
@@ -388,41 +367,27 @@
     </style>
 </head>
 <body>
-
     <div class="monolith">
-        <!-- Norse/Greek Corner Ornaments -->
         <div class="corner-decor tl"></div>
         <div class="corner-decor tr"></div>
         <div class="corner-decor bl"></div>
         <div class="corner-decor br"></div>
 
-        <!-- The Guardian Eye -->
         <svg class="guardian-eye" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
             <circle cx="50" cy="50" r="8" class="iris" />
             <circle cx="50" cy="50" r="3" class="pupil" />
-            
             <path d="M50 20 L50 35 M50 65 L50 80 M20 50 L35 50 M65 50 L80 50" stroke-linecap="square" />
             <path d="M28 28 L38 38 M62 62 L72 72 M28 72 L38 62 M62 38 L72 28" stroke-linecap="square" />
-            
-            <!-- Runic outer circle -->
-            <path class="runes" d="M50 10 A40 40 0 0 1 90 50 M90 50 A40 40 0 0 1 50 90 M50 90 A40 40 0 0 1 10 50 M10 50 A40 40 0 0 1 50 10" 
-                  stroke-dasharray="20 10" fill="none" />
+            <path class="runes" d="M50 10 A40 40 0 0 1 90 50 M90 50 A40 40 0 0 1 50 90 M50 90 A40 40 0 0 1 10 50 M10 50 A40 40 0 0 1 50 10" stroke-dasharray="20 10" fill="none" />
         </svg>
 
-        <h1>Heimdall</h1>
-        
+        <h1>Feature Overview</h1>
         <div class="bifrost-line"></div>
 
         <p class="description">
-            Detect and label low effort and AI generated Pull Request contributions in your GitHub projects. 
-            The All-Seeing Watcher brings order to your codebase.
+            A brief map of the core capabilities that Heimdall brings to every pull request,
+            helping maintainers review faster with consistent, explainable automation.
         </p>
-
-        <div class="cta-container">
-            <a href="https://github.com/apps/heimdall-triage-bot/installations/new" class="cta-button">
-                Install on GitHub
-            </a>
-        </div>
 
         <div class="features">
             <div class="feature">
@@ -431,8 +396,8 @@
                         <path d="M25 45 L25 5 M10 20 L25 5 L40 20" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <h3>Judge</h3>
-                <p>Instantly labels low-effort contributions with divine accuracy.</p>
+                <h3>Webhook Triage</h3>
+                <p>Runs on pull request open, edit, sync, reopen, ready-for-review, and relevant label events to keep triage current.</p>
             </div>
 
             <div class="feature">
@@ -441,8 +406,8 @@
                         <path d="M35 10 L15 25 L35 40" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <h3>Detect</h3>
-                <p>Identifies AI-generated slop before it pollutes your sanctity.</p>
+                <h3>Smart Labels</h3>
+                <p>Applies and maintains triage:low-effort, triage:ai-slop, and a single size label from size/XS through size/XL.</p>
             </div>
 
             <div class="feature">
@@ -451,20 +416,51 @@
                         <path d="M15 45 L15 5 M15 15 L35 25 M15 25 L35 35" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <h3>Explain</h3>
-                <p>Provides clear, reason-based scoring for every judgment made.</p>
+                <h3>Explainable Scoring</h3>
+                <p>Publishes one managed triage comment with a transparent score breakdown and updates it on every rerun.</p>
+            </div>
+
+            <div class="feature">
+                <div class="rune-icon">
+                    <svg class="rune-svg" viewBox="0 0 50 50">
+                        <path d="M8 25 L42 25 M25 8 L42 25 L25 42" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h3>Duplicate Detection</h3>
+                <p>Checks newly opened pull requests for likely duplicates using patch and metadata similarity to reduce repeated work.</p>
+            </div>
+
+            <div class="feature">
+                <div class="rune-icon">
+                    <svg class="rune-svg" viewBox="0 0 50 50">
+                        <path d="M10 35 L25 10 L40 35 Z M25 10 L25 42" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h3>Human Override</h3>
+                <p>Honors the reviewed-by-human label so maintainers can bypass automation on pull requests already validated manually.</p>
+            </div>
+
+            <div class="feature">
+                <div class="rune-icon">
+                    <svg class="rune-svg" viewBox="0 0 50 50">
+                        <path d="M10 10 L40 10 L20 25 L40 40 L10 40" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <h3>Trusted Bypasses</h3>
+                <p>Skips triage for trusted automation accounts and trusted title patterns, keeping noise low and signal high.</p>
             </div>
         </div>
 
+        <div class="action-row">
+            <a href="/" class="cta-button secondary">Back to Main Page</a>
+            <a href="https://github.com/apps/heimdall-triage-bot/installations/new" class="cta-button">Install on GitHub</a>
+        </div>
 
         <div class="border-pattern"></div>
 
         <footer>
             <a href="https://github.com/AxerLab/heimdall" target="_blank" rel="noopener noreferrer">View Source on GitHub</a>
-            <span aria-hidden="true"> · </span>
-            <a href="/features.html">Feature Overview</a>
         </footer>
     </div>
-
 </body>
 </html>
