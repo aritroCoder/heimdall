@@ -679,6 +679,9 @@ function classifyAuthorCategory(
     return 'new';
 }
 
+/** 
+ * Given a PR author category (member/contributor/new), return the corresponding label to apply to the PR
+ */
 function getAuthorLabel(authorCategory: AuthorCategory): string {
     if (authorCategory === 'member') {
         return AUTHOR_LABEL_MEMBER;
@@ -711,6 +714,9 @@ function getErrorStatus(error: unknown): number | undefined {
     return typeof status === 'number' ? status : undefined;
 }
 
+/**
+ * Creates the low effort and AI slop label
+ */
 async function ensureManagedLabelsExist({
     github,
     owner,
@@ -764,6 +770,9 @@ async function ensureManagedLabelsExist({
     }
 }
 
+/**
+ * Creates the author classification (member/contributor/new) label
+ */
 async function ensureAuthorLabelsExist({
     github,
     owner,
@@ -810,6 +819,9 @@ async function ensureAuthorLabelsExist({
     }
 }
 
+/**
+ * Updates author label for a issue/PR number by adding and deleting labels
+ */
 async function syncAuthorLabel({
     github,
     owner,
@@ -856,6 +868,9 @@ async function syncAuthorLabel({
     }
 }
 
+/**
+ * Updates code labels (low-effort/ai-slop) by adding and removing labels
+ */
 async function syncManagedLabels({
     github,
     owner,
@@ -944,12 +959,14 @@ async function upsertTriageComment({
     repo,
     issueNumber,
     body,
+    logger,
 }: {
     github: GithubClient;
     owner: string;
     repo: string;
     issueNumber: number;
     body: string;
+    logger?: LoggerLike | null;
 }): Promise<void> {
     await upsertManagedComment({
         github,
@@ -958,6 +975,7 @@ async function upsertTriageComment({
         issueNumber,
         body,
         marker: BOT_COMMENT_MARKER,
+        logger,
     });
 }
 
@@ -967,12 +985,14 @@ async function upsertProcessingComment({
     repo,
     issueNumber,
     body,
+    logger,
 }: {
     github: GithubClient;
     owner: string;
     repo: string;
     issueNumber: number;
     body: string;
+    logger?: LoggerLike | null;
 }): Promise<void> {
     await upsertManagedComment({
         github,
@@ -981,6 +1001,7 @@ async function upsertProcessingComment({
         issueNumber,
         body,
         marker: PROCESSING_COMMENT_MARKER,
+        logger,
     });
 }
 
@@ -990,12 +1011,14 @@ async function upsertDuplicateComment({
     repo,
     issueNumber,
     body,
+    logger,
 }: {
     github: GithubClient;
     owner: string;
     repo: string;
     issueNumber: number;
     body: string;
+    logger?: LoggerLike | null;
 }): Promise<void> {
     await upsertManagedComment({
         github,
@@ -1004,9 +1027,13 @@ async function upsertDuplicateComment({
         issueNumber,
         body,
         marker: DUPLICATE_COMMENT_MARKER,
+        logger,
     });
 }
 
+/**
+ * Insert or update any comment on github
+ */
 async function upsertManagedComment({
     github,
     owner,
@@ -1014,6 +1041,7 @@ async function upsertManagedComment({
     issueNumber,
     body,
     marker,
+    logger,
 }: {
     github: GithubClient;
     owner: string;
@@ -1021,8 +1049,9 @@ async function upsertManagedComment({
     issueNumber: number;
     body: string;
     marker: string;
+    logger?: LoggerLike | null;
 }): Promise<void> {
-    // if already comment posted for duplicate PR, update instead of creating new comment
+    const log = toLogger(logger);
     const existingComment = await findExistingManagedComment({
         github,
         owner,
@@ -1032,6 +1061,7 @@ async function upsertManagedComment({
     });
 
     if (existingComment) {
+        log.info(`Updating existing comment on ${owner}/${repo}#${issueNumber} (marker: ${marker})`);
         await github.rest.issues.updateComment({
             owner,
             repo,
@@ -1041,6 +1071,7 @@ async function upsertManagedComment({
         return;
     }
 
+    log.info(`Creating new comment on ${owner}/${repo}#${issueNumber} (marker: ${marker})`);
     await github.rest.issues.createComment({
         owner,
         repo,
@@ -1231,6 +1262,7 @@ async function runDuplicateCheckForPullRequest({
                 repo,
                 issueNumber: pullNumber,
                 body: commentBody,
+                logger: log,
             });
         } else {
             log.warning(
@@ -1319,7 +1351,7 @@ export async function runTriageForPullRequest({
         .filter((label) => label.length > 0);
     const author = fullPullRequest.user?.login || '';
 
-    const shouldHandleOpenedMetadata = eventAction === 'opened';
+    const shouldHandleOpenedMetadata = eventAction === 'opened' || eventAction === 'reopened';
     let processingCommentPosted = false;
 
     if (shouldHandleOpenedMetadata) {
@@ -1340,6 +1372,7 @@ export async function runTriageForPullRequest({
             repo,
             issueNumber: pullNumber,
             body: buildProcessingCommentBody(authorCategory),
+            logger: log,
         });
         processingCommentPosted = true;
     }
@@ -1539,6 +1572,7 @@ export async function runTriageForPullRequest({
                 repo,
                 issueNumber: pullNumber,
                 body: commentBody,
+                logger: log,
             });
         }
 
