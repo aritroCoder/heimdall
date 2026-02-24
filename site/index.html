@@ -260,7 +260,10 @@
         /* CTA Button */
         .cta-container {
             position: relative;
-            display: inline-block;
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 1rem;
             margin-bottom: 4rem;
             z-index: 10;
         }
@@ -294,6 +297,20 @@
         
         .cta-button:active {
             transform: translateY(1px);
+        }
+
+        .cta-button.secondary {
+            background: #ffffff;
+            color: var(--text-main);
+            border: 1px solid rgba(212, 175, 55, 0.5);
+            text-shadow: none;
+            box-shadow: 0 8px 16px rgba(42, 37, 32, 0.08);
+        }
+
+        .cta-button.secondary:hover {
+            background: var(--stone-surface);
+            color: var(--text-main);
+            box-shadow: 0 12px 22px rgba(42, 37, 32, 0.12);
         }
 
         /* Greek Meander Border (SVG pattern) */
@@ -422,6 +439,9 @@
             <a href="https://github.com/apps/heimdall-triage-bot/installations/new" class="cta-button">
                 Install on GitHub
             </a>
+            <a href="/features.html" class="cta-button secondary">
+                Feature Overview
+            </a>
         </div>
 
         <div class="features">
@@ -461,8 +481,6 @@
 
         <footer>
             <a href="https://github.com/AxerLab/heimdall" target="_blank" rel="noopener noreferrer">View Source on GitHub</a>
-            <span aria-hidden="true"> · </span>
-            <a href="/features.html">Feature Overview</a>
         </footer>
     </div>
 
